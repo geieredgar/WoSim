@@ -8,3 +8,4 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+ash = "0.32"

@@ -9,3 +9,7 @@ edition = "2018"
 
 [dependencies]
 wosim-common = { path = "../wosim-common" }
+
+
+[[bin]]
+name = "wosim-server"

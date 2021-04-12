@@ -8,5 +8,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+ash-window = "0.6"
+winit = "0.24"
 wosim-common = { path = "../wosim-common" }
 wosim-server = { path = "../wosim-server" }
