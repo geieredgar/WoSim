@@ -1,0 +1,3 @@
+[workspace]
+members = ["wosim", "wosim-common", "wosim-server"]
+default-members = ["wosim"]
