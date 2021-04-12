@@ -4,7 +4,6 @@ use std::{
 };
 
 use ash::{
-    extensions::khr,
     prelude::VkResult,
     version::{EntryV1_0, InstanceV1_0},
     vk::{make_version, ApplicationInfo, InstanceCreateInfo, SurfaceKHR},
@@ -15,7 +14,7 @@ use super::{Error, PhysicalDevice, Surface, Version};
 
 pub struct Instance {
     pub(super) inner: ash::Instance,
-    entry: Entry,
+    pub(super) entry: Entry,
 }
 
 impl Instance {
@@ -49,9 +48,8 @@ impl Instance {
         self: &Arc<Self>,
         create_handle: F,
     ) -> VkResult<Surface> {
-        let surface = khr::Surface::new(&self.entry, &self.inner);
         let handle = create_handle(&self.entry, &self.inner)?;
-        Ok(Surface::new(self.clone(), surface, handle))
+        Ok(Surface::new(self.clone(), handle))
     }
 
     pub fn physical_devices(self: &Arc<Self>) -> VkResult<Vec<PhysicalDevice>> {

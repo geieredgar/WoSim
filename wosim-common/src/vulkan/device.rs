@@ -4,18 +4,23 @@ use ash::{
     prelude::VkResult,
     version::{DeviceV1_0, InstanceV1_0, InstanceV1_1},
     vk::{
-        self, ExtensionProperties, PhysicalDeviceFeatures2, PhysicalDeviceProperties,
+        self, CommandPoolCreateFlags, CommandPoolCreateInfo, ExtensionProperties, FenceCreateFlags,
+        FenceCreateInfo, ImageViewCreateInfo, PhysicalDeviceFeatures2, PhysicalDeviceProperties,
         PhysicalDeviceType, PhysicalDeviceVulkan12Features, PresentModeKHR, Queue,
-        QueueFamilyProperties, SubmitInfo, SurfaceFormatKHR,
+        QueueFamilyProperties, SemaphoreCreateInfo, SubmitInfo, SurfaceCapabilitiesKHR,
+        SurfaceFormatKHR,
     },
 };
 use vk::{DeviceCreateInfo, DeviceQueueCreateInfo};
 
-use super::{Fence, Handle, Instance, Surface};
+use super::{
+    CommandPool, Fence, Handle, ImageView, Instance, Semaphore, Surface, Swapchain,
+    SwapchainConfiguration,
+};
 
 #[derive(Clone)]
 pub struct PhysicalDevice {
-    instance: Arc<Instance>,
+    pub(super) instance: Arc<Instance>,
     handle: vk::PhysicalDevice,
 }
 
@@ -76,6 +81,14 @@ impl PhysicalDevice {
         }
     }
 
+    pub fn surface_capabilities(&self, surface: &Surface) -> VkResult<SurfaceCapabilitiesKHR> {
+        unsafe {
+            surface
+                .inner
+                .get_physical_device_surface_capabilities(self.handle, surface.handle)
+        }
+    }
+
     pub fn properties(&self) -> PhysicalDeviceProperties {
         unsafe {
             self.instance
@@ -118,8 +131,8 @@ impl PhysicalDevice {
 
 pub struct Device {
     transfer_queue: Option<DeviceQueue>,
-    main_queue: DeviceQueue,
-    inner: ash::Device,
+    pub(super) main_queue: DeviceQueue,
+    pub(super) inner: ash::Device,
     physical_device: PhysicalDevice,
 }
 
@@ -155,6 +168,13 @@ impl Device {
         unsafe { handle.destroy(&self.inner) }
     }
 
+    pub fn create_swapchain(
+        self: &Arc<Self>,
+        configuration: SwapchainConfiguration<'_>,
+    ) -> VkResult<Swapchain> {
+        Swapchain::new(self.clone(), configuration)
+    }
+
     pub fn submit(&self, submits: &[SubmitInfo], fence: &Fence) -> VkResult<()> {
         unsafe {
             self.inner
@@ -185,6 +205,54 @@ impl Device {
             .unwrap_or(&self.main_queue)
             .family_index
     }
+
+    pub fn create_command_pool(
+        self: &Arc<Self>,
+        flags: CommandPoolCreateFlags,
+        queue_family_index: u32,
+    ) -> VkResult<CommandPool> {
+        let create_info = CommandPoolCreateInfo::builder()
+            .flags(flags)
+            .queue_family_index(queue_family_index);
+        let handle = unsafe { self.inner.create_command_pool(&create_info, None) }?;
+        Ok(CommandPool {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_fence(self: &Arc<Self>, flags: FenceCreateFlags) -> VkResult<Fence> {
+        let create_info = FenceCreateInfo::builder().flags(flags);
+        let handle = unsafe { self.inner.create_fence(&create_info, None) }?;
+        Ok(Fence {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_semaphore(self: &Arc<Self>) -> VkResult<Semaphore> {
+        let create_info = SemaphoreCreateInfo::builder();
+        let handle = unsafe { self.inner.create_semaphore(&create_info, None) }?;
+        Ok(Semaphore {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_image_view(
+        self: &Arc<Self>,
+        create_info: &ImageViewCreateInfo,
+    ) -> VkResult<ImageView> {
+        let handle = unsafe { self.inner.create_image_view(&create_info, None) }?;
+        Ok(ImageView {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn wait_idle(&self) -> VkResult<()> {
+        unsafe { self.inner.device_wait_idle() }
+    }
 }
 
 impl Drop for Device {
@@ -201,7 +269,7 @@ pub struct DeviceConfiguration {
 }
 
 pub(super) struct DeviceQueue {
-    handle: Queue,
+    pub(super) handle: Queue,
     family_index: u32,
 }
 

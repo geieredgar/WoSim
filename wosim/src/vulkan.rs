@@ -3,8 +3,7 @@ use std::cmp::{Ordering, Reverse};
 use wosim_common::vulkan::{
     cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration,
     DeviceFeatures, Format, KhrPortabilitySubsetFn, PhysicalDevice, PhysicalDeviceProperties,
-    PresentModeKHR, QueueFlags, Surface, SurfaceFormatKHR, Swapchain, SwapchainConfiguration,
-    VkResult,
+    PresentModeKHR, QueueFlags, Surface, SurfaceFormatKHR, Swapchain, VkResult,
 };
 
 pub struct DeviceCandidate {
@@ -15,7 +14,9 @@ pub struct DeviceCandidate {
 
 impl DeviceCandidate {
     pub fn new(physical_device: PhysicalDevice, surface: &Surface) -> VkResult<Option<Self>> {
-        if configure_swapchain(&physical_device, surface, true)?.is_none() {
+        if choose_surface_format(&physical_device, surface)?.is_none()
+            || choose_present_mode(&physical_device, surface, false)?.is_none()
+        {
             return Ok(None);
         };
         let features = DeviceFeatures::default();
@@ -100,15 +101,19 @@ impl Ord for DeviceCandidate {
     }
 }
 
-fn present_mode_priority(present_mode: PresentModeKHR, vsync: bool) -> usize {
-    if present_mode == PresentModeKHR::IMMEDIATE && !vsync {
-        3
+fn present_mode_priority(present_mode: PresentModeKHR, disable_vsync: bool) -> usize {
+    if present_mode == PresentModeKHR::IMMEDIATE {
+        if disable_vsync {
+            4
+        } else {
+            0
+        }
     } else if present_mode == PresentModeKHR::MAILBOX {
-        2
+        3
     } else if present_mode == PresentModeKHR::FIFO {
-        1
+        2
     } else {
-        0
+        1
     }
 }
 
@@ -122,31 +127,23 @@ fn surface_format_priority(surface_format: SurfaceFormatKHR) -> usize {
     }
 }
 
-pub fn configure_swapchain(
+pub fn choose_surface_format(
     physical_device: &PhysicalDevice,
     surface: &Surface,
-    vsync: bool,
-) -> VkResult<Option<SwapchainConfiguration>> {
-    let surface_format = if let Some(surface_format) = physical_device
+) -> VkResult<Option<SurfaceFormatKHR>> {
+    Ok(physical_device
         .surface_formats(surface)?
         .into_iter()
-        .min_by_key(|surface_format| Reverse(surface_format_priority(*surface_format)))
-    {
-        surface_format
-    } else {
-        return Ok(None);
-    };
-    let present_mode = if let Some(present_mode) = physical_device
+        .min_by_key(|surface_format| Reverse(surface_format_priority(*surface_format))))
+}
+
+pub fn choose_present_mode(
+    physical_device: &PhysicalDevice,
+    surface: &Surface,
+    disable_vsync: bool,
+) -> VkResult<Option<PresentModeKHR>> {
+    Ok(physical_device
         .surface_present_modes(surface)?
         .into_iter()
-        .min_by_key(|present_mode| Reverse(present_mode_priority(*present_mode, vsync)))
-    {
-        present_mode
-    } else {
-        return Ok(None);
-    };
-    Ok(Some(SwapchainConfiguration {
-        surface_format,
-        present_mode,
-    }))
+        .min_by_key(|present_mode| Reverse(present_mode_priority(*present_mode, disable_vsync))))
 }

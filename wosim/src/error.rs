@@ -6,6 +6,8 @@ pub enum Error {
     Vulkan(vulkan::Error),
     Os(OsError),
     NoSuitableDeviceFound,
+    NoSuitableSurfaceFormat,
+    NoSuitablePresentMode,
 }
 
 impl From<vulkan::Error> for Error {

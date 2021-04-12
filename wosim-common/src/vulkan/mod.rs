@@ -23,9 +23,12 @@ pub use version::*;
 pub use ash::{
     prelude::VkResult,
     vk::{
-        ColorSpaceKHR, ExtensionProperties, Format, KhrPortabilitySubsetFn,
-        PhysicalDeviceProperties, PresentModeKHR, QueueFamilyProperties, QueueFlags,
-        SurfaceFormatKHR,
+        AccessFlags, BufferMemoryBarrier, ColorSpaceKHR, CommandBufferLevel,
+        CommandBufferUsageFlags, CommandPoolCreateFlags, CommandPoolResetFlags, DependencyFlags,
+        ExtensionProperties, Extent2D, FenceCreateFlags, Format, ImageAspectFlags, ImageLayout,
+        ImageMemoryBarrier, ImageSubresourceRange, KhrPortabilitySubsetFn, MemoryBarrier,
+        PhysicalDeviceProperties, PipelineStageFlags, PresentModeKHR, QueueFamilyProperties,
+        QueueFlags, SubmitInfo, SurfaceFormatKHR,
     },
 };
 

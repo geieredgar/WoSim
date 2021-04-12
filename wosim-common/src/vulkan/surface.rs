@@ -11,7 +11,8 @@ pub struct Surface {
 }
 
 impl Surface {
-    pub(super) fn new(instance: Arc<Instance>, inner: khr::Surface, handle: SurfaceKHR) -> Self {
+    pub(super) fn new(instance: Arc<Instance>, handle: SurfaceKHR) -> Self {
+        let inner = khr::Surface::new(&instance.entry, &instance.inner);
         Self {
             inner,
             handle,
