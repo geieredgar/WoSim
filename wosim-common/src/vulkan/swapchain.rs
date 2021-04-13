@@ -14,6 +14,7 @@ use super::{Device, ImageView, Semaphore, Surface};
 
 pub struct Swapchain {
     image_format: Format,
+    image_extent: Extent2D,
     handle: SwapchainKHR,
     inner: khr::Swapchain,
     device: Arc<Device>,
@@ -74,6 +75,7 @@ impl Swapchain {
         let handle = unsafe { inner.create_swapchain(&create_info, None) }?;
         Ok(Self {
             image_format,
+            image_extent,
             handle,
             inner,
             device,
@@ -106,6 +108,14 @@ impl Swapchain {
             .into_iter()
             .map(|handle| SwapchainImage::new(self, handle))
             .collect()
+    }
+
+    pub fn image_format(&self) -> Format {
+        self.image_format
+    }
+
+    pub fn image_extent(&self) -> Extent2D {
+        self.image_extent
     }
 }
 

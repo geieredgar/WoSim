@@ -12,3 +12,6 @@ ash-window = "0.6"
 winit = "0.24"
 wosim-common = { path = "../wosim-common" }
 wosim-server = { path = "../wosim-server" }
+
+[build-dependencies]
+wosim-build = { path = "../wosim-build" }

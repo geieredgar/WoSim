@@ -9,3 +9,8 @@ edition = "2018"
 
 [dependencies]
 ash = "0.32"
+cfg-if = "1"
+memmap = "0.7"
+
+[features]
+embed-assets = []

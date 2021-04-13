@@ -1,6 +1,9 @@
 use ash::{
     version::DeviceV1_0,
-    vk::{CommandBuffer, CommandPool, Fence, ImageView, Semaphore},
+    vk::{
+        CommandBuffer, CommandPool, DescriptorSetLayout, Fence, Framebuffer, ImageView, Pipeline,
+        PipelineCache, PipelineLayout, RenderPass, Semaphore, ShaderModule,
+    },
     Device,
 };
 
@@ -37,6 +40,48 @@ impl Handle for ImageView {
     }
 }
 
+impl Handle for RenderPass {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_render_pass(self, None)
+    }
+}
+
+impl Handle for ShaderModule {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_shader_module(self, None)
+    }
+}
+
+impl Handle for PipelineCache {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_pipeline_cache(self, None)
+    }
+}
+
+impl Handle for Pipeline {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_pipeline(self, None)
+    }
+}
+
+impl Handle for PipelineLayout {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_pipeline_layout(self, None)
+    }
+}
+
+impl Handle for DescriptorSetLayout {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_descriptor_set_layout(self, None)
+    }
+}
+
+impl Handle for Framebuffer {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_framebuffer(self, None)
+    }
+}
+
 pub trait HandleWrapper {
     type Handle;
 }
@@ -45,3 +90,6 @@ pub trait DerefHandle: Handle {}
 
 impl DerefHandle for CommandBuffer {}
 impl DerefHandle for Semaphore {}
+impl DerefHandle for ShaderModule {}
+impl DerefHandle for PipelineLayout {}
+impl DerefHandle for RenderPass {}

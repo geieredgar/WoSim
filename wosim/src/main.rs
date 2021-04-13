@@ -21,6 +21,7 @@ mod context;
 mod error;
 mod frame;
 mod renderer;
+mod shaders;
 mod view;
 mod vulkan;
 
@@ -51,17 +52,14 @@ impl Application {
         let surface = instance.create_surface(|entry, instance| unsafe {
             create_surface(entry, instance, &window, None)
         })?;
-        let device = Arc::new(
-            instance
-                .physical_devices()?
-                .into_iter()
-                .max_ok_filter_map(|physical_device| {
-                    DeviceCandidate::new(physical_device, &surface)
-                })?
-                .ok_or(Error::NoSuitableDeviceFound)?
-                .create()?,
-        );
-        let context = Context::new(&device)?;
+        let (device, render_configuration) = instance
+            .physical_devices()?
+            .into_iter()
+            .max_ok_filter_map(|physical_device| DeviceCandidate::new(physical_device, &surface))?
+            .ok_or(Error::NoSuitableDeviceFound)?
+            .create()?;
+        let device = Arc::new(device);
+        let context = Context::new(&device, render_configuration)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
         Ok(Self {

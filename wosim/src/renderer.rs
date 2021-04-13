@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common::vulkan::{Device, Swapchain};
+use wosim_common::vulkan::{Device, Format, Swapchain};
 
 use crate::{context::Context, error::Error, frame::Frame, view::View};
 
@@ -14,6 +14,10 @@ pub struct Renderer {
 
 pub struct RenderResult {
     pub suboptimal: bool,
+}
+
+pub struct RenderConfiguration {
+    pub depth_format: Format,
 }
 
 impl Renderer {

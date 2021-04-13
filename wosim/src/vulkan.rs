@@ -2,14 +2,18 @@ use std::cmp::{Ordering, Reverse};
 
 use wosim_common::vulkan::{
     cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration,
-    DeviceFeatures, Format, KhrPortabilitySubsetFn, PhysicalDevice, PhysicalDeviceProperties,
-    PresentModeKHR, QueueFlags, Surface, SurfaceFormatKHR, Swapchain, VkResult,
+    DeviceFeatures, Format, FormatFeatureFlags, ImageTiling, KhrPortabilitySubsetFn,
+    PhysicalDevice, PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface,
+    SurfaceFormatKHR, Swapchain, VkResult,
 };
+
+use crate::renderer::RenderConfiguration;
 
 pub struct DeviceCandidate {
     physical_device: PhysicalDevice,
     device_configuration: DeviceConfiguration,
     properties: PhysicalDeviceProperties,
+    render_configuration: RenderConfiguration,
 }
 
 impl DeviceCandidate {
@@ -68,16 +72,36 @@ impl DeviceCandidate {
             main_queue_family_index,
             transfer_queue_family_index,
         };
+        let depth_format = if let Some(format) = find_supported_format(
+            &physical_device,
+            &[
+                Format::D16_UNORM,
+                Format::D32_SFLOAT,
+                Format::D32_SFLOAT_S8_UINT,
+                Format::D24_UNORM_S8_UINT,
+            ],
+            ImageTiling::OPTIMAL,
+            FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        ) {
+            format
+        } else {
+            return Ok(None);
+        };
+        let render_configuration = RenderConfiguration { depth_format };
         let properties = physical_device.properties();
         Ok(Some(Self {
             physical_device,
             device_configuration,
             properties,
+            render_configuration,
         }))
     }
 
-    pub fn create(self) -> VkResult<Device> {
-        self.physical_device.create(self.device_configuration)
+    pub fn create(self) -> VkResult<(Device, RenderConfiguration)> {
+        Ok((
+            self.physical_device.create(self.device_configuration)?,
+            self.render_configuration,
+        ))
     }
 }
 
@@ -146,4 +170,26 @@ pub fn choose_present_mode(
         .surface_present_modes(surface)?
         .into_iter()
         .min_by_key(|present_mode| Reverse(present_mode_priority(*present_mode, disable_vsync))))
+}
+
+fn find_supported_format(
+    physical_device: &PhysicalDevice,
+    formats: &[Format],
+    tiling: ImageTiling,
+    required_features: FormatFeatureFlags,
+) -> Option<Format> {
+    for format in formats {
+        let properties = physical_device.format_properties(*format);
+        let available_features = if tiling == ImageTiling::LINEAR {
+            properties.linear_tiling_features
+        } else if tiling == ImageTiling::OPTIMAL {
+            properties.optimal_tiling_features
+        } else {
+            FormatFeatureFlags::empty()
+        };
+        if available_features.contains(required_features) {
+            return Some(*format);
+        }
+    }
+    None
 }

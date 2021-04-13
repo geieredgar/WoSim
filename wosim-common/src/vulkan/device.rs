@@ -4,17 +4,22 @@ use ash::{
     prelude::VkResult,
     version::{DeviceV1_0, InstanceV1_0, InstanceV1_1},
     vk::{
-        self, CommandPoolCreateFlags, CommandPoolCreateInfo, ExtensionProperties, FenceCreateFlags,
-        FenceCreateInfo, ImageViewCreateInfo, PhysicalDeviceFeatures2, PhysicalDeviceProperties,
-        PhysicalDeviceType, PhysicalDeviceVulkan12Features, PresentModeKHR, Queue,
-        QueueFamilyProperties, SemaphoreCreateInfo, SubmitInfo, SurfaceCapabilitiesKHR,
+        self, CommandPoolCreateFlags, CommandPoolCreateInfo, DescriptorSetLayoutBinding,
+        DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, ExtensionProperties,
+        FenceCreateFlags, FenceCreateInfo, Format, FormatProperties, ImageViewCreateInfo,
+        PhysicalDeviceFeatures2, PhysicalDeviceProperties, PhysicalDeviceType,
+        PhysicalDeviceVulkan12Features, PipelineCacheCreateFlags, PipelineCacheCreateInfo,
+        PipelineLayoutCreateFlags, PipelineLayoutCreateInfo, PresentModeKHR, PushConstantRange,
+        Queue, QueueFamilyProperties, RenderPassCreateInfo, SemaphoreCreateInfo,
+        ShaderModuleCreateFlags, ShaderModuleCreateInfo, SubmitInfo, SurfaceCapabilitiesKHR,
         SurfaceFormatKHR,
     },
 };
 use vk::{DeviceCreateInfo, DeviceQueueCreateInfo};
 
 use super::{
-    CommandPool, Fence, Handle, ImageView, Instance, Semaphore, Surface, Swapchain,
+    CommandPool, DescriptorSetLayout, Fence, Handle, ImageView, Instance, PipelineCache,
+    PipelineLayout, RenderPass, Semaphore, ShaderModule, Surface, Swapchain,
     SwapchainConfiguration,
 };
 
@@ -94,6 +99,14 @@ impl PhysicalDevice {
             self.instance
                 .inner
                 .get_physical_device_properties(self.handle)
+        }
+    }
+
+    pub fn format_properties(&self, format: Format) -> FormatProperties {
+        unsafe {
+            self.instance
+                .inner
+                .get_physical_device_format_properties(self.handle, format)
         }
     }
 
@@ -239,12 +252,90 @@ impl Device {
         })
     }
 
+    pub fn create_descriptor_set_layout(
+        self: &Arc<Self>,
+        flags: DescriptorSetLayoutCreateFlags,
+        bindings: &[DescriptorSetLayoutBinding],
+    ) -> VkResult<DescriptorSetLayout> {
+        let create_info = DescriptorSetLayoutCreateInfo::builder()
+            .flags(flags)
+            .bindings(bindings);
+        let handle = unsafe { self.inner.create_descriptor_set_layout(&create_info, None) }?;
+        Ok(DescriptorSetLayout {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_pipeline_layout(
+        self: &Arc<Self>,
+        flags: PipelineLayoutCreateFlags,
+        set_layouts: &[DescriptorSetLayout],
+        push_constant_ranges: &[PushConstantRange],
+    ) -> VkResult<PipelineLayout> {
+        let set_layouts: Vec<_> = set_layouts
+            .iter()
+            .map(|set_layout| set_layout.handle)
+            .collect();
+        let create_info = PipelineLayoutCreateInfo::builder()
+            .flags(flags)
+            .set_layouts(&set_layouts)
+            .push_constant_ranges(push_constant_ranges);
+        let handle = unsafe { self.inner.create_pipeline_layout(&create_info, None) }?;
+        Ok(PipelineLayout {
+            handle,
+            device: self.clone(),
+        })
+    }
+
     pub fn create_image_view(
         self: &Arc<Self>,
         create_info: &ImageViewCreateInfo,
     ) -> VkResult<ImageView> {
-        let handle = unsafe { self.inner.create_image_view(&create_info, None) }?;
+        let handle = unsafe { self.inner.create_image_view(create_info, None) }?;
         Ok(ImageView {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_render_pass(
+        self: &Arc<Self>,
+        create_info: &RenderPassCreateInfo,
+    ) -> VkResult<RenderPass> {
+        let handle = unsafe { self.inner.create_render_pass(create_info, None) }?;
+        Ok(RenderPass {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_shader_module(
+        self: &Arc<Self>,
+        flags: ShaderModuleCreateFlags,
+        code: &[u32],
+    ) -> VkResult<ShaderModule> {
+        let create_info = ShaderModuleCreateInfo::builder().flags(flags).code(code);
+        let handle = unsafe { self.inner.create_shader_module(&create_info, None) }?;
+        Ok(ShaderModule {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_pipeline_cache(
+        self: &Arc<Self>,
+        flags: PipelineCacheCreateFlags,
+        initial_data: Option<&[u8]>,
+    ) -> VkResult<PipelineCache> {
+        let create_info = if let Some(initial_data) = initial_data {
+            PipelineCacheCreateInfo::builder().initial_data(initial_data)
+        } else {
+            PipelineCacheCreateInfo::builder()
+        }
+        .flags(flags);
+        let handle = unsafe { self.inner.create_pipeline_cache(&create_info, None) }?;
+        Ok(PipelineCache {
             handle,
             device: self.clone(),
         })
