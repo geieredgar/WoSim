@@ -4,7 +4,7 @@ use wosim_common::{
     iterator::MaxOkFilterMap,
     vulkan::{Instance, Version},
 };
-use wosim_server::{vulkan::DeviceCandidate, Error};
+use wosim_server::{DeviceCandidate, Error};
 
 fn main() -> Result<(), Error> {
     let version = Version {

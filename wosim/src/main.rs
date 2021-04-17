@@ -1,5 +1,6 @@
 use std::{ffi::CString, sync::Arc};
 
+use ::egui::containers;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use error::Error;
@@ -18,6 +19,7 @@ use wosim_common::{
 };
 
 mod context;
+mod egui;
 mod error;
 mod frame;
 mod renderer;
@@ -73,6 +75,7 @@ impl Application {
     }
 
     fn process_event(&mut self, event: Event<()>) -> Result<ControlFlow, Error> {
+        self.context.egui.handle_event(&event);
         match event {
             Event::WindowEvent { event, .. } => {
                 if event == winit::event::WindowEvent::CloseRequested {
@@ -80,7 +83,10 @@ impl Application {
                 }
             }
             Event::MainEventsCleared => {
-                let resize = match self.renderer.render(&self.device, &self.context) {
+                self.context.egui.frame(|ctx| {
+                    containers::Window::new("Debug info").show(ctx, |_| {});
+                });
+                let resize = match self.renderer.render(&self.device, &mut self.context) {
                     Ok(result) => result.suboptimal,
                     Err(err) => match err {
                         Error::Vulkan(vulkan_err) => match vulkan_err {
@@ -138,11 +144,11 @@ fn create_swapchain(
     let present_mode = choose_present_mode(device.physical_device(), surface, disable_vsync)?
         .ok_or(Error::NoSuitablePresentMode)?;
     let configuration = SwapchainConfiguration {
-        extent,
-        present_mode,
-        previous,
         surface,
+        previous,
+        present_mode,
         surface_format,
+        extent,
     };
     Ok(device.create_swapchain(configuration)?)
 }

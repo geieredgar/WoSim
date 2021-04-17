@@ -3,6 +3,7 @@ use std::{ffi::CStr, ops::Deref, sync::Arc};
 use ash::{
     extensions::khr,
     prelude::VkResult,
+    version::DeviceV1_0,
     vk::{
         self, CompositeAlphaFlagsKHR, Extent2D, Format, Image, ImageAspectFlags,
         ImageSubresourceRange, ImageUsageFlags, ImageViewCreateInfo, ImageViewType, PresentInfoKHR,
@@ -151,7 +152,15 @@ impl SwapchainImage {
                     .layer_count(1)
                     .build(),
             );
-        let view = swapchain.device.create_image_view(&create_info)?;
+        let view = ImageView {
+            handle: unsafe {
+                swapchain
+                    .device
+                    .inner
+                    .create_image_view(&create_info, None)?
+            },
+            device: swapchain.device.clone(),
+        };
         Ok(Self { view, handle })
     }
 

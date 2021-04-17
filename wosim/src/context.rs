@@ -9,6 +9,7 @@ use wosim_common::{
 };
 
 use crate::{
+    egui::EguiContext,
     error::Error,
     renderer::RenderConfiguration,
     shaders::{DEFAULT_FRAG, DEFAULT_VERT},
@@ -20,6 +21,7 @@ pub struct Context {
     pub pipeline_cache: PipelineCache,
     pub pipeline_layout: PipelineLayout,
     pub configuration: RenderConfiguration,
+    pub egui: EguiContext,
 }
 
 impl Context {
@@ -37,12 +39,14 @@ impl Context {
         let set_layouts = [];
         let pipeline_layout =
             device.create_pipeline_layout(PipelineLayoutCreateFlags::empty(), &set_layouts, &[])?;
+        let egui = EguiContext::new(device)?;
         Ok(Self {
             vertex_shader_module,
             fragment_shader_module,
             pipeline_cache,
-            configuration,
             pipeline_layout,
+            configuration,
+            egui,
         })
     }
 }

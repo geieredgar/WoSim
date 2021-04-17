@@ -1,4 +1,5 @@
 mod error;
-pub mod vulkan;
+mod vulkan;
 
 pub use error::*;
+pub use vulkan::*;

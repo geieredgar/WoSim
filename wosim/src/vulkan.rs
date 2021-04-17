@@ -1,10 +1,11 @@
 use std::cmp::{Ordering, Reverse};
 
+use vulkan::{PhysicalDeviceFeatures, FALSE, TRUE};
 use wosim_common::vulkan::{
-    cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration,
-    DeviceFeatures, Format, FormatFeatureFlags, ImageTiling, KhrPortabilitySubsetFn,
-    PhysicalDevice, PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface,
-    SurfaceFormatKHR, Swapchain, VkResult,
+    self, cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration, Format,
+    FormatFeatureFlags, ImageTiling, KhrPortabilitySubsetFn, PhysicalDevice,
+    PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface, SurfaceFormatKHR, Swapchain,
+    VkResult,
 };
 
 use crate::renderer::RenderConfiguration;
@@ -23,13 +24,28 @@ impl DeviceCandidate {
         {
             return Ok(None);
         };
-        let features = DeviceFeatures::default();
+        let features = physical_device.features();
+        let mut enabled_features = PhysicalDeviceFeatures::default();
+        let properties = physical_device.properties();
         let extensions = physical_device.extension_properties()?;
         if !contains_extension(&extensions, Swapchain::extension_name()) {
             return Ok(None);
         }
         let mut extension_names = vec![Swapchain::extension_name()];
         if contains_extension(&extensions, KhrPortabilitySubsetFn::name()) {
+            if ![1, 2, 4, 5, 10, 20].contains(
+                &properties
+                    .portability_subset
+                    .min_vertex_input_binding_stride_alignment,
+            ) {
+                return Ok(None);
+            }
+            if features.portability_subset.image_view_format_swizzle == FALSE {
+                return Ok(None);
+            }
+            enabled_features
+                .portability_subset
+                .image_view_format_swizzle = TRUE;
             extension_names.push(KhrPortabilitySubsetFn::name());
         }
         let families = physical_device.queue_family_properties();
@@ -68,7 +84,7 @@ impl DeviceCandidate {
             .map(|(index, _)| index as u32);
         let device_configuration = DeviceConfiguration {
             extension_names,
-            features,
+            features: enabled_features,
             main_queue_family_index,
             transfer_queue_family_index,
         };
@@ -88,7 +104,6 @@ impl DeviceCandidate {
             return Ok(None);
         };
         let render_configuration = RenderConfiguration { depth_format };
-        let properties = physical_device.properties();
         Ok(Some(Self {
             physical_device,
             device_configuration,
@@ -97,7 +112,7 @@ impl DeviceCandidate {
         }))
     }
 
-    pub fn create(self) -> VkResult<(Device, RenderConfiguration)> {
+    pub fn create(self) -> Result<(Device, RenderConfiguration), vulkan::Error> {
         Ok((
             self.physical_device.create(self.device_configuration)?,
             self.render_configuration,
@@ -121,7 +136,10 @@ impl PartialOrd for DeviceCandidate {
 
 impl Ord for DeviceCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
-        cmp_device_types(self.properties.device_type, other.properties.device_type)
+        cmp_device_types(
+            self.properties.vulkan_10.properties.device_type,
+            other.properties.vulkan_10.properties.device_type,
+        )
     }
 }
 

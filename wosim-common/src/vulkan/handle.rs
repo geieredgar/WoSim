@@ -1,8 +1,9 @@
 use ash::{
     version::DeviceV1_0,
     vk::{
-        CommandBuffer, CommandPool, DescriptorSetLayout, Fence, Framebuffer, ImageView, Pipeline,
-        PipelineCache, PipelineLayout, RenderPass, Semaphore, ShaderModule,
+        CommandBuffer, CommandPool, DescriptorPool, DescriptorSet, DescriptorSetLayout, Fence,
+        Framebuffer, ImageView, Pipeline, PipelineCache, PipelineLayout, RenderPass, Sampler,
+        Semaphore, ShaderModule,
     },
     Device,
 };
@@ -82,6 +83,22 @@ impl Handle for Framebuffer {
     }
 }
 
+impl Handle for DescriptorSet {
+    unsafe fn destroy(self, _device: &Device) {}
+}
+
+impl Handle for DescriptorPool {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_descriptor_pool(self, None);
+    }
+}
+
+impl Handle for Sampler {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_sampler(self, None);
+    }
+}
+
 pub trait HandleWrapper {
     type Handle;
 }
@@ -93,3 +110,6 @@ impl DerefHandle for Semaphore {}
 impl DerefHandle for ShaderModule {}
 impl DerefHandle for PipelineLayout {}
 impl DerefHandle for RenderPass {}
+impl DerefHandle for DescriptorSet {}
+impl DerefHandle for ImageView {}
+impl DerefHandle for Sampler {}

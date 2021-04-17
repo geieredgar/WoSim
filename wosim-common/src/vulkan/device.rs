@@ -1,160 +1,46 @@
-use std::{cmp::Ordering, ffi::CStr, sync::Arc};
+use std::{ffi::CStr, sync::Arc};
 
 use ash::{
     prelude::VkResult,
-    version::{DeviceV1_0, InstanceV1_0, InstanceV1_1},
+    version::DeviceV1_0,
     vk::{
-        self, CommandPoolCreateFlags, CommandPoolCreateInfo, DescriptorSetLayoutBinding,
-        DescriptorSetLayoutCreateFlags, DescriptorSetLayoutCreateInfo, ExtensionProperties,
-        FenceCreateFlags, FenceCreateInfo, Format, FormatProperties, ImageViewCreateInfo,
-        PhysicalDeviceFeatures2, PhysicalDeviceProperties, PhysicalDeviceType,
-        PhysicalDeviceVulkan12Features, PipelineCacheCreateFlags, PipelineCacheCreateInfo,
-        PipelineLayoutCreateFlags, PipelineLayoutCreateInfo, PresentModeKHR, PushConstantRange,
-        Queue, QueueFamilyProperties, RenderPassCreateInfo, SemaphoreCreateInfo,
-        ShaderModuleCreateFlags, ShaderModuleCreateInfo, SubmitInfo, SurfaceCapabilitiesKHR,
-        SurfaceFormatKHR,
+        self, BufferCreateInfo, BufferUsageFlags, CommandPoolCreateFlags, CommandPoolCreateInfo,
+        ComponentMapping, CopyDescriptorSet, DescriptorPoolCreateFlags, DescriptorPoolCreateInfo,
+        DescriptorPoolSize, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
+        DescriptorSetLayoutCreateInfo, FenceCreateFlags, FenceCreateInfo, Format, ImageCreateInfo,
+        ImageSubresourceRange, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType,
+        PipelineCacheCreateFlags, PipelineCacheCreateInfo, PipelineLayoutCreateFlags,
+        PipelineLayoutCreateInfo, PushConstantRange, Queue, RenderPassCreateInfo,
+        SamplerCreateInfo, SemaphoreCreateInfo, ShaderModuleCreateFlags, ShaderModuleCreateInfo,
+        SubmitInfo, WriteDescriptorSet,
     },
 };
-use vk::{DeviceCreateInfo, DeviceQueueCreateInfo};
 
-use super::{
-    CommandPool, DescriptorSetLayout, Fence, Handle, ImageView, Instance, PipelineCache,
-    PipelineLayout, RenderPass, Semaphore, ShaderModule, Surface, Swapchain,
-    SwapchainConfiguration,
+use vk_mem::{
+    AllocationCreateInfo, AllocationInfo, Allocator, AllocatorCreateFlags, AllocatorCreateInfo,
+    MemoryUsage,
 };
 
-#[derive(Clone)]
-pub struct PhysicalDevice {
-    pub(super) instance: Arc<Instance>,
-    handle: vk::PhysicalDevice,
-}
-
-impl PhysicalDevice {
-    pub(super) fn new(instance: Arc<Instance>, handle: vk::PhysicalDevice) -> Self {
-        Self { instance, handle }
-    }
-
-    pub fn features(&self) -> DeviceFeatures {
-        let mut features = DeviceFeatures::default();
-        unsafe {
-            self.instance
-                .inner
-                .get_physical_device_features2(self.handle, features.chain())
-        };
-        features
-    }
-
-    pub fn extension_properties(&self) -> VkResult<Vec<ExtensionProperties>> {
-        unsafe {
-            self.instance
-                .inner
-                .enumerate_device_extension_properties(self.handle)
-        }
-    }
-
-    pub fn queue_family_properties(&self) -> Vec<QueueFamilyProperties> {
-        unsafe {
-            self.instance
-                .inner
-                .get_physical_device_queue_family_properties(self.handle)
-        }
-    }
-
-    pub fn surface_support(&self, surface: &Surface, queue_family_index: u32) -> VkResult<bool> {
-        unsafe {
-            surface.inner.get_physical_device_surface_support(
-                self.handle,
-                queue_family_index,
-                surface.handle,
-            )
-        }
-    }
-
-    pub fn surface_formats(&self, surface: &Surface) -> VkResult<Vec<SurfaceFormatKHR>> {
-        unsafe {
-            surface
-                .inner
-                .get_physical_device_surface_formats(self.handle, surface.handle)
-        }
-    }
-
-    pub fn surface_present_modes(&self, surface: &Surface) -> VkResult<Vec<PresentModeKHR>> {
-        unsafe {
-            surface
-                .inner
-                .get_physical_device_surface_present_modes(self.handle, surface.handle)
-        }
-    }
-
-    pub fn surface_capabilities(&self, surface: &Surface) -> VkResult<SurfaceCapabilitiesKHR> {
-        unsafe {
-            surface
-                .inner
-                .get_physical_device_surface_capabilities(self.handle, surface.handle)
-        }
-    }
-
-    pub fn properties(&self) -> PhysicalDeviceProperties {
-        unsafe {
-            self.instance
-                .inner
-                .get_physical_device_properties(self.handle)
-        }
-    }
-
-    pub fn format_properties(&self, format: Format) -> FormatProperties {
-        unsafe {
-            self.instance
-                .inner
-                .get_physical_device_format_properties(self.handle, format)
-        }
-    }
-
-    pub fn create(self, mut configuration: DeviceConfiguration) -> VkResult<Device> {
-        let queue_priorities = [1.0];
-        let mut queue_create_infos = vec![DeviceQueueCreateInfo::builder()
-            .queue_family_index(configuration.main_queue_family_index)
-            .queue_priorities(&queue_priorities)
-            .build()];
-        if let Some(transfer_family_index) = configuration.transfer_queue_family_index {
-            queue_create_infos.push(
-                DeviceQueueCreateInfo::builder()
-                    .queue_family_index(transfer_family_index)
-                    .queue_priorities(&queue_priorities)
-                    .build(),
-            )
-        }
-        let extension_names_ptr: Vec<_> = configuration
-            .extension_names
-            .iter()
-            .map(|c| c.as_ptr())
-            .collect();
-        let create_info = DeviceCreateInfo::builder()
-            .queue_create_infos(&queue_create_infos)
-            .enabled_extension_names(&extension_names_ptr)
-            .push_next(configuration.features.chain());
-        let device = unsafe {
-            self.instance
-                .inner
-                .create_device(self.handle, &create_info, None)?
-        };
-        Ok(Device::new(self, device, configuration))
-    }
-}
+use super::{
+    Buffer, CommandPool, DescriptorPool, DescriptorSetLayout, Fence, GpuVec, Handle, Image,
+    ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache, PipelineLayout, RenderPass,
+    Sampler, Semaphore, ShaderModule, Swapchain, SwapchainConfiguration,
+};
 
 pub struct Device {
     transfer_queue: Option<DeviceQueue>,
     pub(super) main_queue: DeviceQueue,
+    pub(super) allocator: Allocator,
     pub(super) inner: ash::Device,
     physical_device: PhysicalDevice,
 }
 
 impl Device {
-    fn new(
+    pub(super) fn new(
         physical_device: PhysicalDevice,
         inner: ash::Device,
         configuration: DeviceConfiguration,
-    ) -> Device {
+    ) -> vk_mem::Result<Device> {
         let main_queue = DeviceQueue {
             handle: unsafe { inner.get_device_queue(configuration.main_queue_family_index, 0) },
             family_index: configuration.main_queue_family_index,
@@ -165,12 +51,22 @@ impl Device {
                 handle: unsafe { inner.get_device_queue(family_index, 0) },
                 family_index,
             });
-        Self {
+        let allocator = vk_mem::Allocator::new(&AllocatorCreateInfo {
+            physical_device: physical_device.handle,
+            device: inner.clone(),
+            instance: physical_device.instance.inner.clone(),
+            flags: AllocatorCreateFlags::empty(),
+            preferred_large_heap_block_size: 0,
+            frame_in_use_count: 0,
+            heap_size_limits: None,
+        })?;
+        Ok(Self {
             transfer_queue,
             main_queue,
+            allocator,
             inner,
             physical_device,
-        }
+        })
     }
 
     pub fn physical_device(&self) -> &PhysicalDevice {
@@ -195,7 +91,7 @@ impl Device {
         }
     }
 
-    pub fn transfer_submit(&self, submits: &[SubmitInfo], fence: &Fence) -> VkResult<()> {
+    pub fn transfer_submit(&self, submits: &[SubmitInfo], fence: Option<&Fence>) -> VkResult<()> {
         unsafe {
             self.inner.queue_submit(
                 self.transfer_queue
@@ -203,7 +99,7 @@ impl Device {
                     .unwrap_or(&self.main_queue)
                     .handle,
                 submits,
-                fence.handle,
+                fence.map(|x| x.handle).unwrap_or_else(vk::Fence::null),
             )
         }
     }
@@ -217,6 +113,10 @@ impl Device {
             .as_ref()
             .unwrap_or(&self.main_queue)
             .family_index
+    }
+
+    pub fn has_dedicated_transfer_queue(&self) -> bool {
+        self.transfer_queue.is_some()
     }
 
     pub fn create_command_pool(
@@ -267,10 +167,27 @@ impl Device {
         })
     }
 
+    pub fn create_descriptor_pool(
+        self: &Arc<Self>,
+        flags: DescriptorPoolCreateFlags,
+        pool_sizes: &[DescriptorPoolSize],
+        max_sets: u32,
+    ) -> VkResult<DescriptorPool> {
+        let create_info = DescriptorPoolCreateInfo::builder()
+            .flags(flags)
+            .pool_sizes(pool_sizes)
+            .max_sets(max_sets);
+        let handle = unsafe { self.inner.create_descriptor_pool(&create_info, None) }?;
+        Ok(DescriptorPool {
+            handle,
+            device: self.clone(),
+        })
+    }
+
     pub fn create_pipeline_layout(
         self: &Arc<Self>,
         flags: PipelineLayoutCreateFlags,
-        set_layouts: &[DescriptorSetLayout],
+        set_layouts: &[&DescriptorSetLayout],
         push_constant_ranges: &[PushConstantRange],
     ) -> VkResult<PipelineLayout> {
         let set_layouts: Vec<_> = set_layouts
@@ -288,11 +205,39 @@ impl Device {
         })
     }
 
+    pub fn create_buffer(
+        self: &Arc<Self>,
+        create_info: &BufferCreateInfo,
+        allocation_info: &AllocationCreateInfo,
+    ) -> vk_mem::Result<(Buffer, AllocationInfo)> {
+        Buffer::new(self.clone(), create_info, allocation_info)
+    }
+
+    pub fn create_image(
+        self: &Arc<Self>,
+        create_info: &ImageCreateInfo,
+        allocation_info: &AllocationCreateInfo,
+    ) -> vk_mem::Result<(Image, AllocationInfo)> {
+        Image::new(self.clone(), create_info, allocation_info)
+    }
+
     pub fn create_image_view(
         self: &Arc<Self>,
-        create_info: &ImageViewCreateInfo,
+        flags: ImageViewCreateFlags,
+        image: &Image,
+        view_type: ImageViewType,
+        format: Format,
+        components: ComponentMapping,
+        subresource_range: ImageSubresourceRange,
     ) -> VkResult<ImageView> {
-        let handle = unsafe { self.inner.create_image_view(create_info, None) }?;
+        let create_info = ImageViewCreateInfo::builder()
+            .flags(flags)
+            .image(image.handle)
+            .view_type(view_type)
+            .format(format)
+            .components(components)
+            .subresource_range(subresource_range);
+        let handle = unsafe { self.inner.create_image_view(&create_info, None) }?;
         Ok(ImageView {
             handle,
             device: self.clone(),
@@ -323,6 +268,14 @@ impl Device {
         })
     }
 
+    pub fn create_sampler(self: &Arc<Self>, create_info: &SamplerCreateInfo) -> VkResult<Sampler> {
+        let handle = unsafe { self.inner.create_sampler(create_info, None) }?;
+        Ok(Sampler {
+            handle,
+            device: self.clone(),
+        })
+    }
+
     pub fn create_pipeline_cache(
         self: &Arc<Self>,
         flags: PipelineCacheCreateFlags,
@@ -341,6 +294,26 @@ impl Device {
         })
     }
 
+    pub fn create_vec<T: Copy>(
+        self: &Arc<Self>,
+        capacity: usize,
+        buffer_usage: BufferUsageFlags,
+        memory_usage: MemoryUsage,
+    ) -> vk_mem::Result<GpuVec<T>> {
+        GpuVec::new(self.clone(), capacity, buffer_usage, memory_usage)
+    }
+
+    pub fn update_descriptor_sets(
+        self: &Arc<Self>,
+        descriptor_writes: &[WriteDescriptorSet],
+        descriptor_copies: &[CopyDescriptorSet],
+    ) {
+        unsafe {
+            self.inner
+                .update_descriptor_sets(&descriptor_writes, &descriptor_copies)
+        }
+    }
+
     pub fn wait_idle(&self) -> VkResult<()> {
         unsafe { self.inner.device_wait_idle() }
     }
@@ -348,13 +321,14 @@ impl Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
+        self.allocator.destroy();
         unsafe { self.inner.destroy_device(None) }
     }
 }
 
 pub struct DeviceConfiguration {
     pub extension_names: Vec<&'static CStr>,
-    pub features: DeviceFeatures,
+    pub features: PhysicalDeviceFeatures,
     pub main_queue_family_index: u32,
     pub transfer_queue_family_index: Option<u32>,
 }
@@ -362,38 +336,4 @@ pub struct DeviceConfiguration {
 pub(super) struct DeviceQueue {
     pub(super) handle: Queue,
     family_index: u32,
-}
-
-#[derive(Default, Clone)]
-pub struct DeviceFeatures {
-    pub vulkan_10: PhysicalDeviceFeatures2,
-    pub vulkan_12: PhysicalDeviceVulkan12Features,
-}
-
-impl DeviceFeatures {
-    fn chain(&mut self) -> &mut PhysicalDeviceFeatures2 {
-        self.vulkan_10.p_next =
-            &mut self.vulkan_12 as *mut PhysicalDeviceVulkan12Features as *mut _;
-        &mut self.vulkan_10
-    }
-}
-
-pub fn cmp_device_types(a: PhysicalDeviceType, b: PhysicalDeviceType) -> Ordering {
-    device_type_priority(a).cmp(&device_type_priority(b))
-}
-
-fn device_type_priority(device_type: PhysicalDeviceType) -> u32 {
-    if device_type == PhysicalDeviceType::DISCRETE_GPU {
-        5
-    } else if device_type == PhysicalDeviceType::INTEGRATED_GPU {
-        4
-    } else if device_type == PhysicalDeviceType::CPU {
-        3
-    } else if device_type == PhysicalDeviceType::VIRTUAL_GPU {
-        2
-    } else if device_type == PhysicalDeviceType::OTHER {
-        1
-    } else {
-        0
-    }
 }

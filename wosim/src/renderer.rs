@@ -41,7 +41,7 @@ impl Renderer {
     pub fn render(
         &mut self,
         device: &Arc<Device>,
-        context: &Context,
+        context: &mut Context,
     ) -> Result<RenderResult, Error> {
         let frame_index = self.frame_index;
         self.frame_index = (frame_index + 1) % FRAMES_IN_FLIGHT;

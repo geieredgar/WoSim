@@ -4,5 +4,7 @@ fn main() -> Result<(), Error> {
     let mut compiler = new_shader_compiler()?;
     compiler.compile("default.vert")?;
     compiler.compile("default.frag")?;
+    compiler.compile("egui.vert")?;
+    compiler.compile("egui.frag")?;
     Ok(())
 }

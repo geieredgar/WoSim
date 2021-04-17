@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 
 use wosim_common::vulkan::{
-    cmp_device_types, contains_extension, Device, DeviceConfiguration, DeviceFeatures,
-    KhrPortabilitySubsetFn, PhysicalDevice, PhysicalDeviceProperties, QueueFamilyProperties,
-    QueueFlags, VkResult,
+    self, cmp_device_types, contains_extension, Device, DeviceConfiguration,
+    KhrPortabilitySubsetFn, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceProperties,
+    QueueFamilyProperties, QueueFlags, VkResult,
 };
 
 pub struct DeviceCandidate {
@@ -14,7 +14,7 @@ pub struct DeviceCandidate {
 
 impl DeviceCandidate {
     pub fn new(physical_device: PhysicalDevice) -> VkResult<Option<Self>> {
-        let features = DeviceFeatures::default();
+        let features = PhysicalDeviceFeatures::default();
         let extensions = physical_device.extension_properties()?;
         let mut extension_names = Vec::new();
         if contains_extension(&extensions, KhrPortabilitySubsetFn::name()) {
@@ -56,7 +56,7 @@ impl DeviceCandidate {
         }))
     }
 
-    pub fn create(self) -> VkResult<Device> {
+    pub fn create(self) -> Result<Device, vulkan::Error> {
         self.physical_device.create(self.device_configuration)
     }
 }
@@ -77,7 +77,10 @@ impl PartialOrd for DeviceCandidate {
 
 impl Ord for DeviceCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
-        cmp_device_types(self.properties.device_type, other.properties.device_type)
+        cmp_device_types(
+            self.properties.vulkan_10.properties.device_type,
+            other.properties.vulkan_10.properties.device_type,
+        )
     }
 }
 

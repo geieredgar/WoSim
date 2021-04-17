@@ -1,76 +1,66 @@
 use std::{ffi::CString, sync::Arc};
 
 use wosim_common::vulkan::{
-    AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp,
-    BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags, DescriptorPool, Device,
-    FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp, Offset2D, Pipeline,
-    PipelineBindPoint, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
-    PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-    PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-    PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, Rect2D, RenderPass,
-    RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, SubpassDependency,
-    SubpassDescription, Swapchain, SwapchainImage, Viewport, SUBPASS_EXTERNAL,
+    BlendFactor, BlendOp, ColorComponentFlags, CullModeFlags, Device, DynamicState, Extent2D,
+    Format, GraphicsPipelineCreateInfo, LogicOp, Offset2D, Pipeline, PipelineCache,
+    PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
+    PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo,
+    PipelineInputAssemblyStateCreateInfo, PipelineMultisampleStateCreateInfo,
+    PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
+    PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
+    PrimitiveTopology, Rect2D, RenderPass, SampleCountFlags, ShaderStageFlags,
+    VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
 };
 
-use crate::{context::Context, egui::EguiView, error::Error, frame::Frame};
+use crate::error::Error;
 
-pub struct View {
-    pub egui: EguiView,
-    pub descriptor_pool: DescriptorPool,
-    pub pipeline: Pipeline,
-    pub render_pass: RenderPass,
-    pub images: Vec<SwapchainImage>,
-    pub swapchain: Arc<Swapchain>,
+use super::EguiContext;
+
+pub struct EguiView {
+    pub(super) pipeline: Pipeline,
 }
 
-impl View {
+impl EguiView {
     pub fn new(
-        device: &Arc<Device>,
-        context: &Context,
-        swapchain: Arc<Swapchain>,
+        _device: &Arc<Device>,
+        context: &EguiContext,
+        pipeline_cache: &PipelineCache,
+        image_extent: Extent2D,
+        _image_format: Format,
+        render_pass: &RenderPass,
+        subpass_index: u32,
     ) -> Result<Self, Error> {
-        let image_format = swapchain.image_format();
-        let attachments = [AttachmentDescription::builder()
-            .format(image_format)
-            .samples(SampleCountFlags::TYPE_1)
-            .load_op(AttachmentLoadOp::CLEAR)
-            .store_op(AttachmentStoreOp::STORE)
-            .stencil_load_op(AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(AttachmentStoreOp::DONT_CARE)
-            .initial_layout(ImageLayout::UNDEFINED)
-            .final_layout(ImageLayout::PRESENT_SRC_KHR)
+        let binding_descriptions = [VertexInputBindingDescription::builder()
+            .binding(0)
+            .input_rate(VertexInputRate::VERTEX)
+            .stride(20)
             .build()];
-        let color_attachments = [AttachmentReference::builder()
-            .attachment(0)
-            .layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-            .build()];
-        let subpasses = [SubpassDescription::builder()
-            .color_attachments(&color_attachments)
-            .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
-            .build()];
-        let dependencies = [SubpassDependency::builder()
-            .src_subpass(SUBPASS_EXTERNAL)
-            .dst_subpass(0)
-            .src_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(AccessFlags::empty())
-            .dst_access_mask(AccessFlags::COLOR_ATTACHMENT_WRITE)
-            .build()];
-        let create_info = RenderPassCreateInfo::builder()
-            .attachments(&attachments)
-            .subpasses(&subpasses)
-            .dependencies(&dependencies);
-        let render_pass = device.create_render_pass(&create_info)?;
-        let binding_descriptions = [];
-        let attribute_descriptions = [];
+        let attribute_descriptions = [
+            VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(0)
+                .format(Format::R32G32_SFLOAT)
+                .offset(0)
+                .build(),
+            VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(1)
+                .format(Format::R32G32_SFLOAT)
+                .offset(8)
+                .build(),
+            VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(2)
+                .format(Format::R8G8B8A8_UNORM)
+                .offset(16)
+                .build(),
+        ];
         let vertex_input_state = PipelineVertexInputStateCreateInfo::builder()
             .vertex_binding_descriptions(&binding_descriptions)
             .vertex_attribute_descriptions(&attribute_descriptions);
         let input_assembly_state = PipelineInputAssemblyStateCreateInfo::builder()
             .topology(PrimitiveTopology::TRIANGLE_LIST)
             .primitive_restart_enable(false);
-        let image_extent = swapchain.image_extent();
         let viewports = [Viewport {
             x: 0f32,
             y: 0f32,
@@ -91,8 +81,7 @@ impl View {
             .rasterizer_discard_enable(false)
             .polygon_mode(PolygonMode::FILL)
             .line_width(1f32)
-            .cull_mode(CullModeFlags::BACK)
-            .front_face(FrontFace::COUNTER_CLOCKWISE)
+            .cull_mode(CullModeFlags::NONE)
             .depth_bias_enable(false)
             .depth_bias_constant_factor(0f32)
             .depth_bias_clamp(0f32)
@@ -110,11 +99,11 @@ impl View {
                     | ColorComponentFlags::B
                     | ColorComponentFlags::A,
             )
-            .blend_enable(false)
+            .blend_enable(true)
             .src_color_blend_factor(BlendFactor::ONE)
-            .dst_color_blend_factor(BlendFactor::ZERO)
+            .dst_color_blend_factor(BlendFactor::ONE_MINUS_SRC_ALPHA)
             .color_blend_op(BlendOp::ADD)
-            .src_alpha_blend_factor(BlendFactor::ONE)
+            .src_alpha_blend_factor(BlendFactor::ZERO)
             .dst_alpha_blend_factor(BlendFactor::ZERO)
             .alpha_blend_op(BlendOp::ADD)
             .build()];
@@ -136,10 +125,12 @@ impl View {
                 .name(&main_name)
                 .build(),
         ];
+        let dynamic_states = [DynamicState::SCISSOR];
+        let dynamic_state =
+            PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_states);
         let depth_stencil_state = PipelineDepthStencilStateCreateInfo::builder()
             .depth_test_enable(false)
             .depth_write_enable(false)
-            .depth_compare_op(CompareOp::GREATER_OR_EQUAL)
             .depth_bounds_test_enable(false)
             .stencil_test_enable(false);
         let create_infos = [GraphicsPipelineCreateInfo::builder()
@@ -152,29 +143,12 @@ impl View {
             .color_blend_state(&color_blend_state)
             .depth_stencil_state(&depth_stencil_state)
             .layout(*context.pipeline_layout)
-            .render_pass(*render_pass)
-            .subpass(0)
+            .dynamic_state(&dynamic_state)
+            .render_pass(**render_pass)
+            .subpass(subpass_index)
             .build()];
-        let mut pipelines = context.pipeline_cache.create_graphics(&create_infos)?;
+        let mut pipelines = pipeline_cache.create_graphics(&create_infos)?;
         let pipeline = pipelines.remove(0);
-        let images = swapchain.images()?;
-        let descriptor_pool = (Frame::pool_setup() * 2).create_pool(device)?;
-        let egui = EguiView::new(
-            device,
-            &context.egui,
-            &context.pipeline_cache,
-            image_extent,
-            image_format,
-            &render_pass,
-            0,
-        )?;
-        Ok(Self {
-            egui,
-            descriptor_pool,
-            pipeline,
-            render_pass,
-            images,
-            swapchain,
-        })
+        Ok(Self { pipeline })
     }
 }
