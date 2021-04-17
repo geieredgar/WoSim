@@ -13,8 +13,8 @@ use ash::{
 use bytemuck::{bytes_of, Pod};
 
 use super::{
-    Buffer, DescriptorSet, Framebuffer, Image, Object, Pipeline, PipelineLayout, QueryPool,
-    RenderPass,
+    Buffer, DescriptorSet, Framebuffer, Image, ImageTransferInfo, Object, Pipeline, PipelineLayout,
+    QueryPool, RenderPass,
 };
 
 pub type CommandPool = Object<vk::CommandPool>;
@@ -364,14 +364,14 @@ impl CommandBuffer {
         regions: &[BufferImageCopy],
     ) {
         self.pipeline_barrier(
-            PipelineStageFlags::HOST,
+            info.src_stage_mask,
             PipelineStageFlags::TRANSFER,
             DependencyFlags::empty(),
             &[],
             &[],
             &[ImageMemoryBarrier::builder()
                 .image(dst.handle)
-                .src_access_mask(AccessFlags::empty())
+                .src_access_mask(info.src_access_mask)
                 .dst_access_mask(AccessFlags::TRANSFER_WRITE)
                 .old_layout(info.initial_layout)
                 .new_layout(ImageLayout::TRANSFER_DST_OPTIMAL)
@@ -406,11 +406,4 @@ impl CommandBuffer {
             )
         }
     }
-}
-
-pub struct ImageTransferInfo {
-    pub dst_stage_mask: PipelineStageFlags,
-    pub dst_access_mask: AccessFlags,
-    pub initial_layout: ImageLayout,
-    pub final_layout: ImageLayout,
 }

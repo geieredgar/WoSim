@@ -2,7 +2,12 @@ use std::sync::Arc;
 
 use vulkan::{Device, Format, Swapchain};
 
-use crate::{context::Context, error::Error, frame::Frame, view::View};
+use crate::{
+    context::Context,
+    error::Error,
+    frame::{Frame, FrameUpdate},
+    view::View,
+};
 
 const FRAMES_IN_FLIGHT: usize = 2;
 
@@ -56,5 +61,10 @@ impl Renderer {
         let frame_index = self.frame_index;
         self.frame_index = (frame_index + 1) % FRAMES_IN_FLIGHT;
         self.frames[frame_index].render(device, context, &self.view)
+    }
+
+    pub fn update(&mut self, update: Arc<dyn FrameUpdate>) {
+        self.frames[0].update(update.clone());
+        self.frames[1].update(update);
     }
 }

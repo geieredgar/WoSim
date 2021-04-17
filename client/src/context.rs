@@ -11,6 +11,7 @@ use crate::{
     depth::DepthContext,
     egui::EguiContext,
     error::Error,
+    frame::FrameUpdate,
     renderer::RenderConfiguration,
     scene::{Camera, MeshData, Model, Object, SceneContext, Sphere, Transform, Vertex},
     ApplicationMessage,
@@ -136,4 +137,12 @@ impl Context {
             debug,
         })
     }
+}
+
+pub trait ContextUpdate: Send {
+    fn apply(
+        self: Box<Self>,
+        device: &Arc<Device>,
+        context: &mut Context,
+    ) -> Result<Arc<dyn FrameUpdate>, vulkan::Error>;
 }

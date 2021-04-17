@@ -33,6 +33,7 @@ use server::{
     Certificate, ClientMessage, ResolveError, Resolver, ServerAddress, ServerMessage,
     SessionMessage, Token,
 };
+use transfer::Transfers;
 use tokio::{runtime::Runtime, spawn};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 
@@ -46,6 +47,7 @@ mod frame;
 mod renderer;
 mod scene;
 mod shaders;
+mod transfer;
 mod view;
 mod vulkan;
 mod winit;
@@ -53,6 +55,7 @@ mod winit;
 struct Application {
     address: Address<ApplicationMessage>,
     renderer: Renderer,
+    transfers: Transfers,
     swapchain: Arc<Swapchain>,
     context: Context,
     device: Arc<Device>,
@@ -111,6 +114,7 @@ impl Application {
             window.scale_factor() as f32,
         )?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
+        let transfers = Transfers::new(&device);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
         let certificates = read_dir("ca")?
             .filter_map(|entry| entry.ok().map(|entry| read(entry.path()).ok()).flatten())
@@ -120,6 +124,7 @@ impl Application {
         Ok(Self {
             address,
             renderer,
+            transfers,
             swapchain,
             context,
             device,
@@ -323,6 +328,8 @@ impl Application {
 
     fn render(&mut self) -> Result<(), Error> {
         self.update();
+        self.transfers
+                    .poll(&self.device, &mut self.context, &mut self.renderer)?;
         self.context.debug.begin_frame();
         let ctx = self.context.egui.begin();
         self.context.debug.render(&ctx, &mut self.windows);

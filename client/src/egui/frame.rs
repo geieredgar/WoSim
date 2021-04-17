@@ -5,12 +5,12 @@ use nalgebra::Vector2;
 use vulkan::{
     AccessFlags, AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo,
     BufferImageCopy, BufferUsageFlags, CommandBuffer, ComponentMapping, ComponentSwizzle,
-    DescriptorImageInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet, DescriptorType,
-    Device, Extent2D, Extent3D, Format, GpuVec, ImageAspectFlags, ImageCreateInfo, ImageLayout,
-    ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageTransferInfo, ImageType,
-    ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType, MemoryUsage, Offset2D,
-    PipelineBindPoint, PipelineStageFlags, Rect2D, SampleCountFlags, ShaderStageFlags, SharingMode,
-    WriteDescriptorSet,
+    DependencyFlags, DescriptorImageInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet,
+    DescriptorType, Device, Extent2D, Extent3D, Format, GpuVec, ImageAspectFlags, ImageCreateInfo,
+    ImageLayout, ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageTransferInfo,
+    ImageType, ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType, MemoryUsage,
+    Offset2D, PipelineBindPoint, PipelineStageFlags, Rect2D, SampleCountFlags, ShaderStageFlags,
+    SharingMode, WriteDescriptorSet,
 };
 
 use super::{EguiContext, EguiView, Font};
@@ -104,6 +104,9 @@ impl EguiFrame {
                 &buffer,
                 &image,
                 ImageTransferInfo {
+                    src_stage_mask: PipelineStageFlags::HOST,
+                    src_access_mask: AccessFlags::HOST_WRITE,
+                    dependency_flags: DependencyFlags::empty(),
                     dst_stage_mask: PipelineStageFlags::FRAGMENT_SHADER,
                     dst_access_mask: AccessFlags::SHADER_READ,
                     initial_layout: ImageLayout::UNDEFINED,

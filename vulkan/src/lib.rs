@@ -10,6 +10,7 @@ mod object;
 mod physical_device;
 mod surface;
 mod swapchain;
+mod transfer;
 mod version;
 
 use std::{ffi::CStr, os::raw::c_char};
@@ -28,6 +29,7 @@ pub use object::*;
 pub use physical_device::*;
 pub use surface::*;
 pub use swapchain::*;
+pub use transfer::*;
 pub use version::*;
 
 pub use ash::{

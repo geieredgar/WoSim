@@ -1,4 +1,4 @@
-use std::{mem::size_of, sync::Arc};
+use std::{collections::VecDeque, mem::size_of, sync::Arc};
 
 use vulkan::{
     AccessFlags, ApiResult, BufferCopy, BufferMemoryBarrier, ClearColorValue,
@@ -35,6 +35,7 @@ pub struct Frame {
     timestamp_pool: QueryPool,
     command_pool: CommandPool,
     first_render: bool,
+    pending_updates: VecDeque<Arc<dyn FrameUpdate>>,
 }
 
 impl Frame {
@@ -97,6 +98,7 @@ impl Frame {
             })
             .collect();
         let framebuffers = framebuffers?;
+        let pending_updates = VecDeque::new();
         Ok(Self {
             framebuffers,
             cull,
@@ -110,7 +112,12 @@ impl Frame {
             timestamp_pool,
             command_pool,
             first_render: true,
+            pending_updates,
         })
+    }
+
+    pub fn update(&mut self, update: Arc<dyn FrameUpdate>) {
+        self.pending_updates.push_back(update);
     }
 
     pub fn render(
@@ -124,6 +131,9 @@ impl Frame {
             .scene
             .update(&context.scene, view.swapchain.image_extent())?;
         self.main_queue_fence.reset()?;
+        while let Some(update) = self.pending_updates.pop_front() {
+            update.apply(self, device, context, view)?;
+        }
         let timestamps: Option<Vec<u64>> =
             self.timestamp_pool
                 .results(0, 2, QueryResultFlags::TYPE_64)?;
@@ -321,4 +331,14 @@ impl Frame {
             + CullFrame::pool_setup()
             + SceneFrame::pool_setup()
     }
+}
+
+pub trait FrameUpdate: Send + Sync {
+    fn apply(
+        &self,
+        frame: &mut Frame,
+        device: &Arc<Device>,
+        context: &Context,
+        view: &View,
+    ) -> Result<(), vulkan::Error>;
 }

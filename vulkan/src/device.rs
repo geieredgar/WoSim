@@ -26,7 +26,7 @@ use super::{
     Buffer, CommandPool, DescriptorPool, DescriptorSetLayout, Error, Fence, GpuVariable, GpuVec,
     Handle, Image, ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache,
     PipelineLayout, QueryPool, RenderPass, Sampler, Semaphore, ShaderModule, Swapchain,
-    SwapchainConfiguration,
+    SwapchainConfiguration, TransferPool,
 };
 
 pub struct Device {
@@ -134,6 +134,10 @@ impl Device {
             handle,
             device: self.clone(),
         })
+    }
+
+    pub fn create_transfer_pool(self: &Arc<Self>) -> TransferPool {
+        TransferPool::new(self.clone())
     }
 
     pub fn create_fence(self: &Arc<Self>, flags: FenceCreateFlags) -> VkResult<Fence> {
