@@ -1,6 +1,5 @@
 use std::{ffi::CString, sync::Arc};
 
-use ::egui::containers;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use error::Error;
@@ -19,6 +18,7 @@ use wosim_common::{
 };
 
 mod context;
+mod debug;
 mod egui;
 mod error;
 mod frame;
@@ -83,8 +83,9 @@ impl Application {
                 }
             }
             Event::MainEventsCleared => {
+                self.context.debug.begin_frame();
                 if let Some(ctx) = self.context.egui.begin() {
-                    containers::Window::new("Debug info").show(&ctx, |_| {});
+                    self.context.debug.render(&ctx);
                     self.context.egui.end(&self.window)?;
                 }
                 let resize = match self.renderer.render(&self.device, &mut self.context) {
@@ -103,6 +104,7 @@ impl Application {
                         _ => return Err(err),
                     },
                 };
+                self.context.debug.end_frame();
                 if resize {
                     self.device.wait_idle()?;
                     self.swapchain = Arc::new(create_swapchain(
