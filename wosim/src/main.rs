@@ -61,7 +61,7 @@ impl Application {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let device = Arc::new(device);
-        let context = Context::new(&device, render_configuration)?;
+        let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
         Ok(Self {
@@ -83,9 +83,10 @@ impl Application {
                 }
             }
             Event::MainEventsCleared => {
-                self.context.egui.frame(|ctx| {
-                    containers::Window::new("Debug info").show(ctx, |_| {});
-                });
+                if let Some(ctx) = self.context.egui.begin() {
+                    containers::Window::new("Debug info").show(&ctx, |_| {});
+                    self.context.egui.end(&self.window)?;
+                }
                 let resize = match self.renderer.render(&self.device, &mut self.context) {
                     Ok(result) => result.suboptimal,
                     Err(err) => match err {

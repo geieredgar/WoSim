@@ -25,7 +25,11 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(device: &Arc<Device>, configuration: RenderConfiguration) -> Result<Self, Error> {
+    pub fn new(
+        device: &Arc<Device>,
+        configuration: RenderConfiguration,
+        scale_factor: f32,
+    ) -> Result<Self, Error> {
         let vertex_shader_module = device.create_shader_module(
             ShaderModuleCreateFlags::empty(),
             &align_bytes(DEFAULT_VERT.load()?.bytes()),
@@ -39,7 +43,7 @@ impl Context {
         let set_layouts = [];
         let pipeline_layout =
             device.create_pipeline_layout(PipelineLayoutCreateFlags::empty(), &set_layouts, &[])?;
-        let egui = EguiContext::new(device)?;
+        let egui = EguiContext::new(device, scale_factor)?;
         Ok(Self {
             vertex_shader_module,
             fragment_shader_module,

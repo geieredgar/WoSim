@@ -8,6 +8,7 @@ pub enum Error {
     Vulkan(vulkan::Error),
     Os(OsError),
     Io(io::Error),
+    Egui(super::egui::Error),
     NoSuitableDeviceFound,
     NoSuitableSurfaceFormat,
     NoSuitablePresentMode,
@@ -34,5 +35,11 @@ impl From<ApiResult> for Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Self::Io(error)
+    }
+}
+
+impl From<super::egui::Error> for Error {
+    fn from(error: super::egui::Error) -> Self {
+        Self::Egui(error)
     }
 }
