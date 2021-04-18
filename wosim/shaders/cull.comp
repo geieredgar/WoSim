@@ -4,7 +4,7 @@
 
 #extension GL_GOOGLE_include_directive : require
 
-#include "struct.glsl"
+#include "common.glsl"
 
 #define M_PI 3.1415926535897932384626433832795
 
