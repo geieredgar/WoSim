@@ -1,0 +1,97 @@
+#version 460
+
+#pragma shader_stage(compute)
+
+#extension GL_GOOGLE_include_directive : require
+
+#include "struct.glsl"
+
+#define M_PI 3.1415926535897932384626433832795
+
+layout(local_size_x = 256) in;
+
+layout(constant_id = 0) const bool useDrawCount = true;
+
+layout(set = 0, binding = 0, std140) uniform Constants {
+  mat4 view;
+  mat4 previous_view;
+  mat4 projection;
+  mat4 viewProjection;
+  float znear, zfar, w, h;
+  uint objectCount;
+};
+
+layout(set = 0, binding = 1) uniform sampler2D depthPyramid;
+
+layout(set = 0, binding = 2, std430) readonly buffer Objects {
+  Object objects[];
+};
+
+layout(set = 0, binding = 3, std430) readonly buffer Models { Model models[]; };
+
+layout(set = 0, binding = 4, std430) buffer DrawCount { uint drawCount; };
+
+layout(set = 0, binding = 5, std430) writeonly buffer DrawCommands {
+  DrawCommand drawCommands[];
+};
+
+layout(set = 0, binding = 6, std430) writeonly buffer DrawDataList {
+  DrawData drawData[];
+};
+
+bool frustumVisible(vec3 p, float r) {
+  return (-p.x - w * p.z + r > 0) && (p.x - w * p.z + r > 0) &&
+         (-p.y - h * p.z + r > 0) && (p.y - h * p.z + r > 0) &&
+         (-p.z - znear + r > 0) && (p.z + zfar + r > 0);
+}
+
+void main() {
+  if (gl_GlobalInvocationID.x >= objectCount) {
+    return;
+  }
+  Object object = objects[gl_GlobalInvocationID.x];
+  Model model = models[object.model];
+
+  mat4 transform = mat4(vec4(object.transform.scale.x, 0.0, 0.0, 0.0),
+                        vec4(0.0, object.transform.scale.y, 0.0, 0.0),
+                        vec4(0.0, 0.0, object.transform.scale.z, 0.0),
+                        vec4(to_vec3(object.transform.translation), 1.0)) *
+                   quat_to_mat4(object.transform.rotation);
+  float radius =
+      max_component(object.transform.scale) * model.bounds.radius * 1.1;
+  vec4 model_center = vec4(to_vec3(model.bounds.center), 1.0);
+  vec4 world_center = transform * model_center;
+  vec4 view_center = view * world_center;
+  bool visible = frustumVisible(view_center.xyz, radius);
+  view_center = previous_view * world_center;
+  vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+  if (-view_center.z - radius > znear) {
+    vec2 pyramidSize = textureSize(depthPyramid, 0);
+    vec2 screenPos =
+        view_center.xy / (2 * -view_center.z * vec2(w, -h)) + vec2(0.5);
+    float r = radius / (-view_center.z * w) * pyramidSize.x * 1.0;
+    float level = floor(log2(r));
+    float depth = textureLod(depthPyramid, screenPos, level).x;
+    float depth2 = (view_center.z * znear + zfar * znear) /
+                   ((zfar - znear) * -view_center.z);
+    visible = visible && depth2 >= depth;
+  }
+  if (useDrawCount && !visible) {
+    return;
+  }
+  uint drawIndex =
+      useDrawCount ? atomicAdd(drawCount, 1) : gl_GlobalInvocationID.x;
+  DrawCommand command;
+  command.firstIndex = model.mesh.firstIndex;
+  command.indexCount = model.mesh.indexCount;
+  command.vertexOffset = model.mesh.vertexOffset;
+  command.firstInstance = drawIndex;
+  command.instanceCount = visible ? 1 : 0;
+  drawCommands[drawIndex] = command;
+  if (visible) {
+    DrawData data;
+    data.transform = transform;
+    data.color = color;
+    drawData[drawIndex] = data;
+  }
+}

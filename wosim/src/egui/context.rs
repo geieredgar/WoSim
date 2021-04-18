@@ -115,6 +115,10 @@ impl EguiContext {
         })
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     pub fn handle_event(&mut self, event: &winit::event::Event<()>) {
         if !self.enabled {
             if let winit::event::Event::WindowEvent {

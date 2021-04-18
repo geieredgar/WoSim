@@ -1,6 +1,6 @@
 use std::io;
 
-use winit::error::OsError;
+use winit::error::{ExternalError, OsError};
 use wosim_common::vulkan::{self, ApiResult};
 
 #[derive(Debug)]
@@ -9,6 +9,7 @@ pub enum Error {
     Os(OsError),
     Io(io::Error),
     Egui(super::egui::Error),
+    External(ExternalError),
     NoSuitableDeviceFound,
     NoSuitableSurfaceFormat,
     NoSuitablePresentMode,
@@ -41,5 +42,11 @@ impl From<io::Error> for Error {
 impl From<super::egui::Error> for Error {
     fn from(error: super::egui::Error) -> Self {
         Self::Egui(error)
+    }
+}
+
+impl From<ExternalError> for Error {
+    fn from(error: ExternalError) -> Self {
+        Self::External(error)
     }
 }

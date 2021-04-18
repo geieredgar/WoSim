@@ -4,8 +4,8 @@ use ash::{
     prelude::VkResult,
     version::DeviceV1_0,
     vk::{
-        self, FramebufferCreateFlags, FramebufferCreateInfo, GraphicsPipelineCreateInfo,
-        QueryResultFlags,
+        self, ComputePipelineCreateInfo, FramebufferCreateFlags, FramebufferCreateInfo,
+        GraphicsPipelineCreateInfo, QueryResultFlags,
     },
 };
 
@@ -73,6 +73,34 @@ impl PipelineCache {
             self.device
                 .inner
                 .create_graphics_pipelines(self.handle, create_infos, None)
+        } {
+            Ok(inner) => inner,
+            Err((pipelines, err)) => {
+                for pipeline in pipelines {
+                    if pipeline != vk::Pipeline::null() {
+                        unsafe { self.device.inner.destroy_pipeline(pipeline, None) };
+                    }
+                }
+                return Err(err);
+            }
+        };
+        Ok(handles
+            .into_iter()
+            .map(|handle| Pipeline {
+                handle,
+                device: self.device.clone(),
+            })
+            .collect())
+    }
+
+    pub fn create_compute(
+        &self,
+        create_infos: &[ComputePipelineCreateInfo],
+    ) -> VkResult<Vec<Pipeline>> {
+        let handles = match unsafe {
+            self.device
+                .inner
+                .create_compute_pipelines(self.handle, create_infos, None)
         } {
             Ok(inner) => inner,
             Err((pipelines, err)) => {

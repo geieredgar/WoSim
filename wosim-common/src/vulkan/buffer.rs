@@ -1,5 +1,6 @@
 use std::{
     mem::{size_of, swap},
+    ops::Deref,
     sync::Arc,
 };
 
@@ -54,6 +55,14 @@ impl Drop for Buffer {
             .allocator
             .destroy_buffer(self.handle, &self.allocation)
             .unwrap()
+    }
+}
+
+impl Deref for Buffer {
+    type Target = vk::Buffer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
     }
 }
 
