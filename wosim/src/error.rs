@@ -15,24 +15,24 @@ pub enum Error {
 
 impl From<vulkan::Error> for Error {
     fn from(error: vulkan::Error) -> Self {
-        Error::Vulkan(error)
+        Self::Vulkan(error)
     }
 }
 
 impl From<OsError> for Error {
     fn from(error: OsError) -> Self {
-        Error::Os(error)
+        Self::Os(error)
     }
 }
 
 impl From<ApiResult> for Error {
     fn from(result: ApiResult) -> Self {
-        Error::Vulkan(result.into())
+        Self::Vulkan(result.into())
     }
 }
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Error::Io(error)
+        Self::Io(error)
     }
 }
