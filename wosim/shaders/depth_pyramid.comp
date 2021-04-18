@@ -1,0 +1,15 @@
+#version 460
+
+#pragma shader_stage(compute)
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform sampler2D inImage;
+layout(set = 0, binding = 1, r32f) writeonly uniform image2D outImage;
+
+void main() {
+  uvec2 pos = gl_GlobalInvocationID.xy;
+  float depth =
+      texture(inImage, (vec2(pos) + vec2(0.5)) / imageSize(outImage)).x;
+  imageStore(outImage, ivec2(pos), vec4(depth));
+}

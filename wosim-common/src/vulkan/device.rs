@@ -23,9 +23,10 @@ use vk_mem::{
 };
 
 use super::{
-    Buffer, CommandPool, DescriptorPool, DescriptorSetLayout, Fence, GpuVec, Handle, Image,
-    ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache, PipelineLayout, QueryPool,
-    RenderPass, Sampler, Semaphore, ShaderModule, Swapchain, SwapchainConfiguration,
+    Buffer, CommandPool, DescriptorPool, DescriptorSetLayout, Error, Fence, GpuVariable, GpuVec,
+    Handle, Image, ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache,
+    PipelineLayout, QueryPool, RenderPass, Sampler, Semaphore, ShaderModule, Swapchain,
+    SwapchainConfiguration,
 };
 
 pub struct Device {
@@ -235,8 +236,8 @@ impl Device {
         self: &Arc<Self>,
         create_info: &ImageCreateInfo,
         allocation_info: &AllocationCreateInfo,
-    ) -> vk_mem::Result<(Image, AllocationInfo)> {
-        Image::new(self.clone(), create_info, allocation_info)
+    ) -> Result<(Image, AllocationInfo), Error> {
+        Ok(Image::new(self.clone(), create_info, allocation_info)?)
     }
 
     pub fn create_image_view(
@@ -317,8 +318,27 @@ impl Device {
         capacity: usize,
         buffer_usage: BufferUsageFlags,
         memory_usage: MemoryUsage,
-    ) -> vk_mem::Result<GpuVec<T>> {
-        GpuVec::new(self.clone(), capacity, buffer_usage, memory_usage)
+    ) -> Result<GpuVec<T>, Error> {
+        Ok(GpuVec::new(
+            self.clone(),
+            capacity,
+            buffer_usage,
+            memory_usage,
+        )?)
+    }
+
+    pub fn create_variable<T: Copy>(
+        self: &Arc<Self>,
+        buffer_usage: BufferUsageFlags,
+        memory_usage: MemoryUsage,
+        value: T,
+    ) -> Result<GpuVariable<T>, Error> {
+        Ok(GpuVariable::new(
+            self.clone(),
+            buffer_usage,
+            memory_usage,
+            value,
+        )?)
     }
 
     pub fn update_descriptor_sets(

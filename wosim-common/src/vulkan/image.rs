@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use ash::vk::{self, Extent2D, ImageCreateInfo};
 use vk_mem::{Allocation, AllocationCreateInfo, AllocationInfo};
@@ -37,6 +37,14 @@ impl Drop for Image {
             .allocator
             .destroy_image(self.handle, &self.allocation)
             .unwrap()
+    }
+}
+
+impl Deref for Image {
+    type Target = vk::Image;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
     }
 }
 

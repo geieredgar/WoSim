@@ -1,24 +1,22 @@
-use std::{ffi::CString, sync::Arc};
+use std::sync::Arc;
 
 use wosim_common::vulkan::{
-    AccessFlags, AttachmentDescription, AttachmentLoadOp, AttachmentReference, AttachmentStoreOp,
-    BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags, DescriptorPool, Device,
-    FrontFace, GraphicsPipelineCreateInfo, ImageLayout, LogicOp, Offset2D, Pipeline,
-    PipelineBindPoint, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,
-    PipelineDepthStencilStateCreateInfo, PipelineInputAssemblyStateCreateInfo,
-    PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo,
-    PipelineShaderStageCreateInfo, PipelineStageFlags, PipelineVertexInputStateCreateInfo,
-    PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, Rect2D, RenderPass,
-    RenderPassCreateInfo, SampleCountFlags, ShaderStageFlags, SubpassDependency,
-    SubpassDescription, Swapchain, SwapchainImage, Viewport, SUBPASS_EXTERNAL,
+    mip_levels_for_extent, AccessFlags, AttachmentDescription, AttachmentLoadOp,
+    AttachmentReference, AttachmentStoreOp, DescriptorPool, Device, ImageLayout, PipelineBindPoint,
+    PipelineStageFlags, RenderPass, RenderPassCreateInfo, SampleCountFlags, SubpassDependency,
+    SubpassDescription, Swapchain, SwapchainImage, SUBPASS_EXTERNAL,
 };
 
-use crate::{context::Context, egui::EguiView, error::Error, frame::Frame};
+use crate::{
+    context::Context, depth::DepthView, egui::EguiView, error::Error, frame::Frame,
+    scene::SceneView,
+};
 
 pub struct View {
+    pub depth: DepthView,
     pub egui: EguiView,
+    pub scene: SceneView,
     pub descriptor_pool: DescriptorPool,
-    pub pipeline: Pipeline,
     pub render_pass: RenderPass,
     pub images: Vec<SwapchainImage>,
     pub swapchain: Arc<Swapchain>,
@@ -31,134 +29,114 @@ impl View {
         swapchain: Arc<Swapchain>,
     ) -> Result<Self, Error> {
         let image_format = swapchain.image_format();
-        let attachments = [AttachmentDescription::builder()
-            .format(image_format)
-            .samples(SampleCountFlags::TYPE_1)
-            .load_op(AttachmentLoadOp::CLEAR)
-            .store_op(AttachmentStoreOp::STORE)
-            .stencil_load_op(AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(AttachmentStoreOp::DONT_CARE)
-            .initial_layout(ImageLayout::UNDEFINED)
-            .final_layout(ImageLayout::PRESENT_SRC_KHR)
-            .build()];
+        let attachments = [
+            AttachmentDescription::builder()
+                .format(swapchain.image_format())
+                .samples(SampleCountFlags::TYPE_1)
+                .load_op(AttachmentLoadOp::CLEAR)
+                .store_op(AttachmentStoreOp::STORE)
+                .stencil_load_op(AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(AttachmentStoreOp::DONT_CARE)
+                .initial_layout(ImageLayout::UNDEFINED)
+                .final_layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .build(),
+            AttachmentDescription::builder()
+                .format(context.configuration.depth_format)
+                .samples(SampleCountFlags::TYPE_1)
+                .load_op(AttachmentLoadOp::CLEAR)
+                .store_op(AttachmentStoreOp::STORE)
+                .stencil_load_op(AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(AttachmentStoreOp::DONT_CARE)
+                .initial_layout(ImageLayout::UNDEFINED)
+                .final_layout(ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .build(),
+            AttachmentDescription::builder()
+                .format(context.configuration.depth_format)
+                .samples(SampleCountFlags::TYPE_1)
+                .load_op(AttachmentLoadOp::LOAD)
+                .store_op(AttachmentStoreOp::STORE)
+                .stencil_load_op(AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(AttachmentStoreOp::DONT_CARE)
+                .initial_layout(ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                .final_layout(ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .build(),
+            AttachmentDescription::builder()
+                .format(swapchain.image_format())
+                .samples(SampleCountFlags::TYPE_1)
+                .load_op(AttachmentLoadOp::LOAD)
+                .store_op(AttachmentStoreOp::STORE)
+                .stencil_load_op(AttachmentLoadOp::DONT_CARE)
+                .stencil_store_op(AttachmentStoreOp::DONT_CARE)
+                .initial_layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                .final_layout(ImageLayout::PRESENT_SRC_KHR)
+                .build(),
+        ];
         let color_attachments = [AttachmentReference::builder()
             .attachment(0)
             .layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .build()];
-        let subpasses = [SubpassDescription::builder()
-            .color_attachments(&color_attachments)
-            .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
+        let post_color_attachments = [AttachmentReference::builder()
+            .attachment(3)
+            .layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .build()];
-        let dependencies = [SubpassDependency::builder()
-            .src_subpass(SUBPASS_EXTERNAL)
-            .dst_subpass(0)
-            .src_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(AccessFlags::empty())
-            .dst_access_mask(AccessFlags::COLOR_ATTACHMENT_WRITE)
-            .build()];
+        let pre_pass_depth_stencil_attachment = AttachmentReference::builder()
+            .attachment(1)
+            .layout(ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let depth_stencil_attachment = AttachmentReference::builder()
+            .attachment(2)
+            .layout(ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        let subpasses = [
+            SubpassDescription::builder()
+                .color_attachments(&[])
+                .depth_stencil_attachment(&pre_pass_depth_stencil_attachment)
+                .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
+                .build(),
+            SubpassDescription::builder()
+                .color_attachments(&color_attachments)
+                .depth_stencil_attachment(&depth_stencil_attachment)
+                .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
+                .build(),
+            SubpassDescription::builder()
+                .color_attachments(&post_color_attachments)
+                .pipeline_bind_point(PipelineBindPoint::GRAPHICS)
+                .build(),
+        ];
+        let dependencies = [
+            SubpassDependency::builder()
+                .src_subpass(SUBPASS_EXTERNAL)
+                .dst_subpass(0)
+                .src_stage_mask(PipelineStageFlags::TOP_OF_PIPE)
+                .dst_stage_mask(PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                .src_access_mask(AccessFlags::empty())
+                .dst_access_mask(AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .build(),
+            SubpassDependency::builder()
+                .src_subpass(0)
+                .dst_subpass(1)
+                .src_stage_mask(PipelineStageFlags::LATE_FRAGMENT_TESTS)
+                .dst_stage_mask(PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+                .src_access_mask(AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .dst_access_mask(AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ)
+                .build(),
+            SubpassDependency::builder()
+                .src_subpass(1)
+                .dst_subpass(2)
+                .src_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .dst_stage_mask(PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+                .src_access_mask(AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .dst_access_mask(AccessFlags::COLOR_ATTACHMENT_WRITE)
+                .build(),
+        ];
         let create_info = RenderPassCreateInfo::builder()
             .attachments(&attachments)
             .subpasses(&subpasses)
             .dependencies(&dependencies);
         let render_pass = device.create_render_pass(&create_info)?;
-        let binding_descriptions = [];
-        let attribute_descriptions = [];
-        let vertex_input_state = PipelineVertexInputStateCreateInfo::builder()
-            .vertex_binding_descriptions(&binding_descriptions)
-            .vertex_attribute_descriptions(&attribute_descriptions);
-        let input_assembly_state = PipelineInputAssemblyStateCreateInfo::builder()
-            .topology(PrimitiveTopology::TRIANGLE_LIST)
-            .primitive_restart_enable(false);
-        let image_extent = swapchain.image_extent();
-        let viewports = [Viewport {
-            x: 0f32,
-            y: 0f32,
-            width: image_extent.width as f32,
-            height: image_extent.height as f32,
-            min_depth: 0f32,
-            max_depth: 1f32,
-        }];
-        let scissors = [Rect2D {
-            offset: Offset2D { x: 0, y: 0 },
-            extent: image_extent,
-        }];
-        let viewport_state = PipelineViewportStateCreateInfo::builder()
-            .viewports(&viewports)
-            .scissors(&scissors);
-        let rasterization_state = PipelineRasterizationStateCreateInfo::builder()
-            .depth_clamp_enable(false)
-            .rasterizer_discard_enable(false)
-            .polygon_mode(PolygonMode::FILL)
-            .line_width(1f32)
-            .cull_mode(CullModeFlags::BACK)
-            .front_face(FrontFace::COUNTER_CLOCKWISE)
-            .depth_bias_enable(false)
-            .depth_bias_constant_factor(0f32)
-            .depth_bias_clamp(0f32)
-            .depth_bias_slope_factor(0f32);
-        let multisample_state = PipelineMultisampleStateCreateInfo::builder()
-            .sample_shading_enable(false)
-            .rasterization_samples(SampleCountFlags::TYPE_1)
-            .min_sample_shading(1f32)
-            .alpha_to_coverage_enable(false)
-            .alpha_to_one_enable(false);
-        let color_blend_attachments = [PipelineColorBlendAttachmentState::builder()
-            .color_write_mask(
-                ColorComponentFlags::R
-                    | ColorComponentFlags::G
-                    | ColorComponentFlags::B
-                    | ColorComponentFlags::A,
-            )
-            .blend_enable(false)
-            .src_color_blend_factor(BlendFactor::ONE)
-            .dst_color_blend_factor(BlendFactor::ZERO)
-            .color_blend_op(BlendOp::ADD)
-            .src_alpha_blend_factor(BlendFactor::ONE)
-            .dst_alpha_blend_factor(BlendFactor::ZERO)
-            .alpha_blend_op(BlendOp::ADD)
-            .build()];
-        let color_blend_state = PipelineColorBlendStateCreateInfo::builder()
-            .logic_op_enable(false)
-            .logic_op(LogicOp::COPY)
-            .attachments(&color_blend_attachments)
-            .blend_constants([0f32, 0f32, 0f32, 0f32]);
-        let main_name = CString::new("main").unwrap();
-        let stages = [
-            PipelineShaderStageCreateInfo::builder()
-                .stage(ShaderStageFlags::VERTEX)
-                .module(*context.vertex_shader_module)
-                .name(&main_name)
-                .build(),
-            PipelineShaderStageCreateInfo::builder()
-                .stage(ShaderStageFlags::FRAGMENT)
-                .module(*context.fragment_shader_module)
-                .name(&main_name)
-                .build(),
-        ];
-        let depth_stencil_state = PipelineDepthStencilStateCreateInfo::builder()
-            .depth_test_enable(false)
-            .depth_write_enable(false)
-            .depth_compare_op(CompareOp::GREATER_OR_EQUAL)
-            .depth_bounds_test_enable(false)
-            .stencil_test_enable(false);
-        let create_infos = [GraphicsPipelineCreateInfo::builder()
-            .stages(&stages)
-            .vertex_input_state(&vertex_input_state)
-            .input_assembly_state(&input_assembly_state)
-            .viewport_state(&viewport_state)
-            .rasterization_state(&rasterization_state)
-            .multisample_state(&multisample_state)
-            .color_blend_state(&color_blend_state)
-            .depth_stencil_state(&depth_stencil_state)
-            .layout(*context.pipeline_layout)
-            .render_pass(*render_pass)
-            .subpass(0)
-            .build()];
-        let mut pipelines = context.pipeline_cache.create_graphics(&create_infos)?;
-        let pipeline = pipelines.remove(0);
         let images = swapchain.images()?;
-        let descriptor_pool = (Frame::pool_setup() * 2).create_pool(device)?;
+        let image_extent = swapchain.image_extent();
+        let depth_pyramid_mip_levels = mip_levels_for_extent(image_extent);
+        let descriptor_pool =
+            (Frame::pool_setup(depth_pyramid_mip_levels) * 2).create_pool(device)?;
         let egui = EguiView::new(
             device,
             &context.egui,
@@ -166,12 +144,21 @@ impl View {
             image_extent,
             image_format,
             &render_pass,
-            0,
+            2,
         )?;
+        let scene = SceneView::new(
+            &context.scene,
+            &render_pass,
+            &context.pipeline_cache,
+            0,
+            image_extent,
+        )?;
+        let depth = DepthView::new(device, depth_pyramid_mip_levels)?;
         Ok(Self {
+            depth,
+            scene,
             egui,
             descriptor_pool,
-            pipeline,
             render_pass,
             images,
             swapchain,

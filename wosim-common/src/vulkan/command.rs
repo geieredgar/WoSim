@@ -1,13 +1,13 @@
 use ash::{
     prelude::VkResult,
-    version::DeviceV1_0,
+    version::{DeviceV1_0, DeviceV1_2},
     vk::{
-        self, AccessFlags, BufferImageCopy, BufferMemoryBarrier, ClearValue,
-        CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferInheritanceInfo,
-        CommandBufferLevel, CommandBufferUsageFlags, CommandPoolResetFlags, DependencyFlags,
-        ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, IndexType, MemoryBarrier,
-        PipelineBindPoint, PipelineStageFlags, Rect2D, RenderPassBeginInfo, ShaderStageFlags,
-        SubpassContents,
+        self, AccessFlags, BufferCopy, BufferImageCopy, BufferMemoryBarrier, ClearColorValue,
+        ClearValue, CommandBufferAllocateInfo, CommandBufferBeginInfo,
+        CommandBufferInheritanceInfo, CommandBufferLevel, CommandBufferUsageFlags,
+        CommandPoolResetFlags, DependencyFlags, ImageLayout, ImageMemoryBarrier,
+        ImageSubresourceRange, IndexType, MemoryBarrier, PipelineBindPoint, PipelineStageFlags,
+        Rect2D, RenderPassBeginInfo, ShaderStageFlags, SubpassContents,
     },
 };
 use bytemuck::{bytes_of, Pod};
@@ -85,6 +85,43 @@ impl CommandBuffer {
         }
     }
 
+    pub fn clear_color_image(
+        &self,
+        image: &Image,
+        image_layout: ImageLayout,
+        clear_color_value: &ClearColorValue,
+        ranges: &[ImageSubresourceRange],
+    ) {
+        unsafe {
+            self.device.inner.cmd_clear_color_image(
+                self.handle,
+                image.handle,
+                image_layout,
+                clear_color_value,
+                ranges,
+            )
+        }
+    }
+
+    pub fn fill_buffer(&self, buffer: &Buffer, offset: u64, size: u64, data: u32) {
+        unsafe {
+            self.device
+                .inner
+                .cmd_fill_buffer(self.handle, buffer.handle, offset, size, data)
+        }
+    }
+
+    pub fn copy_buffer(&self, src_buffer: &Buffer, dst_buffer: &Buffer, regions: &[BufferCopy]) {
+        unsafe {
+            self.device.inner.cmd_copy_buffer(
+                self.handle,
+                src_buffer.handle,
+                dst_buffer.handle,
+                regions,
+            )
+        }
+    }
+
     pub fn copy_buffer_to_image(
         &self,
         src_buffer: &Buffer,
@@ -105,6 +142,14 @@ impl CommandBuffer {
 
     pub fn next_subpass(&self, contents: SubpassContents) {
         unsafe { self.device.inner.cmd_next_subpass(self.handle, contents) }
+    }
+
+    pub fn dispatch(&self, group_count_x: u32, group_count_y: u32, group_count_z: u32) {
+        unsafe {
+            self.device
+                .inner
+                .cmd_dispatch(self.handle, group_count_x, group_count_y, group_count_z)
+        }
     }
 
     pub fn draw(
@@ -141,6 +186,46 @@ impl CommandBuffer {
                 first_index,
                 vertex_offset,
                 first_instance,
+            )
+        }
+    }
+
+    pub fn draw_indexed_indirect(
+        &self,
+        buffer: &Buffer,
+        offset: u64,
+        draw_count: u32,
+        stride: u32,
+    ) {
+        unsafe {
+            self.device.inner.cmd_draw_indexed_indirect(
+                self.handle,
+                buffer.handle,
+                offset,
+                draw_count,
+                stride,
+            )
+        }
+    }
+
+    pub fn draw_indexed_indirect_count(
+        &self,
+        buffer: &Buffer,
+        offset: u64,
+        count_buffer: &Buffer,
+        count_buffer_offset: u64,
+        max_draw_count: u32,
+        stride: u32,
+    ) {
+        unsafe {
+            self.device.inner.cmd_draw_indexed_indirect_count(
+                self.handle,
+                buffer.handle,
+                offset,
+                count_buffer.handle,
+                count_buffer_offset,
+                max_draw_count,
+                stride,
             )
         }
     }

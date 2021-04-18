@@ -32,6 +32,16 @@ impl DeviceCandidate {
             return Ok(None);
         }
         let mut extension_names = vec![Swapchain::extension_name()];
+        if features.vulkan_10.features.multi_draw_indirect == FALSE {
+            return Ok(None);
+        }
+        enabled_features.vulkan_10.features.multi_draw_indirect = TRUE;
+        let use_draw_count = if features.vulkan_12.draw_indirect_count == TRUE {
+            enabled_features.vulkan_12.draw_indirect_count = TRUE;
+            true
+        } else {
+            false
+        };
         if contains_extension(&extensions, KhrPortabilitySubsetFn::name()) {
             if ![1, 2, 4, 5, 10, 20].contains(
                 &properties
@@ -103,6 +113,18 @@ impl DeviceCandidate {
         } else {
             return Ok(None);
         };
+        let depth_pyramid_format = if let Some(format) = find_supported_format(
+            &physical_device,
+            &[Format::R32_SFLOAT],
+            ImageTiling::OPTIMAL,
+            FormatFeatureFlags::SAMPLED_IMAGE
+                | FormatFeatureFlags::STORAGE_IMAGE
+                | FormatFeatureFlags::TRANSFER_DST,
+        ) {
+            format
+        } else {
+            return Ok(None);
+        };
         if properties
             .vulkan_10
             .properties
@@ -116,7 +138,9 @@ impl DeviceCandidate {
             properties.vulkan_10.properties.limits.timestamp_period as f64 / 1000000.0;
         let render_configuration = RenderConfiguration {
             depth_format,
+            depth_pyramid_format,
             timestamp_period,
+            use_draw_count,
         };
         Ok(Some(Self {
             physical_device,

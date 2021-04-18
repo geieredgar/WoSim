@@ -15,6 +15,7 @@ pub struct Renderer {
 pub struct RenderResult {
     pub suboptimal: bool,
     pub timestamps: Option<RenderTimestamps>,
+    pub last_draw_count: u32,
 }
 
 pub struct RenderTimestamps {
@@ -24,7 +25,9 @@ pub struct RenderTimestamps {
 
 pub struct RenderConfiguration {
     pub depth_format: Format,
+    pub depth_pyramid_format: Format,
     pub timestamp_period: f64,
+    pub use_draw_count: bool,
 }
 
 impl Renderer {
