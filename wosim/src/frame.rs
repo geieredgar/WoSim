@@ -4,11 +4,17 @@ use wosim_common::vulkan::{
     ApiResult, ClearColorValue, ClearValue, CommandBuffer, CommandBufferLevel,
     CommandBufferUsageFlags, CommandPool, CommandPoolCreateFlags, CommandPoolResetFlags,
     DescriptorPoolSetup, Device, Fence, FenceCreateFlags, Framebuffer, FramebufferCreateFlags,
-    Offset2D, PipelineBindPoint, PipelineStageFlags, Rect2D, Semaphore, SubmitInfo,
-    SubpassContents,
+    Offset2D, PipelineBindPoint, PipelineStageFlags, QueryPipelineStatisticFlags, QueryPool,
+    QueryResultFlags, QueryType, Rect2D, Semaphore, SubmitInfo, SubpassContents,
 };
 
-use crate::{context::Context, egui::EguiFrame, error::Error, renderer::RenderResult, view::View};
+use crate::{
+    context::Context,
+    egui::EguiFrame,
+    error::Error,
+    renderer::{RenderResult, RenderTimestamps},
+    view::View,
+};
 
 pub struct Frame {
     egui: EguiFrame,
@@ -16,6 +22,7 @@ pub struct Frame {
     main_queue_fence: Fence,
     image_ready: Semaphore,
     render_finished: Semaphore,
+    timestamp_pool: QueryPool,
     command_pool: CommandPool,
     framebuffers: Vec<Framebuffer>,
 }
@@ -25,6 +32,11 @@ impl Frame {
         let command_pool = device.create_command_pool(
             CommandPoolCreateFlags::TRANSIENT,
             device.main_queue_family_index(),
+        )?;
+        let timestamp_pool = device.create_query_pool(
+            QueryType::TIMESTAMP,
+            2,
+            QueryPipelineStatisticFlags::empty(),
         )?;
         let mut command_buffers = command_pool.allocate(CommandBufferLevel::PRIMARY, 1)?;
         let command_buffer = command_buffers.remove(0);
@@ -54,6 +66,7 @@ impl Frame {
             main_queue_fence,
             image_ready,
             render_finished,
+            timestamp_pool,
             command_pool,
             framebuffers,
         })
@@ -67,9 +80,19 @@ impl Frame {
     ) -> Result<RenderResult, Error> {
         self.main_queue_fence.wait()?;
         self.main_queue_fence.reset()?;
+        let timestamps: Option<Vec<u64>> =
+            self.timestamp_pool
+                .results(0, 2, QueryResultFlags::TYPE_64)?;
         self.command_pool.reset(CommandPoolResetFlags::empty())?;
         self.command_buffer
             .begin(CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
+        self.command_buffer
+            .reset_query_pool(&self.timestamp_pool, 0, 2);
+        self.command_buffer.write_timestamp(
+            PipelineStageFlags::TOP_OF_PIPE,
+            &self.timestamp_pool,
+            0,
+        );
         self.egui
             .prepare(device, &self.command_buffer, &mut context.egui)?;
         let (image_index, suboptimal) = view.swapchain.acquire_next_image(&self.image_ready)?;
@@ -98,6 +121,11 @@ impl Frame {
             view.swapchain.image_extent(),
         )?;
         self.command_buffer.end_render_pass();
+        self.command_buffer.write_timestamp(
+            PipelineStageFlags::BOTTOM_OF_PIPE,
+            &self.timestamp_pool,
+            1,
+        );
         self.command_buffer.end()?;
         let command_buffers = [*self.command_buffer];
         let signal_semaphores = [*self.render_finished];
@@ -111,7 +139,18 @@ impl Frame {
             .build()];
         device.submit(&submits, &self.main_queue_fence)?;
         let suboptimal = view.swapchain.present(image_index, &self.render_finished)? || suboptimal;
-        Ok(RenderResult { suboptimal })
+        let timestamps = if let Some(timestamps) = timestamps {
+            Some(RenderTimestamps {
+                begin: timestamps[0] as f64 * context.configuration.timestamp_period,
+                end: timestamps[1] as f64 * context.configuration.timestamp_period,
+            })
+        } else {
+            None
+        };
+        Ok(RenderResult {
+            suboptimal,
+            timestamps,
+        })
     }
 
     pub fn pool_setup() -> DescriptorPoolSetup {

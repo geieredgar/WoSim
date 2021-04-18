@@ -2,8 +2,8 @@ use ash::{
     version::DeviceV1_0,
     vk::{
         CommandBuffer, CommandPool, DescriptorPool, DescriptorSet, DescriptorSetLayout, Fence,
-        Framebuffer, ImageView, Pipeline, PipelineCache, PipelineLayout, RenderPass, Sampler,
-        Semaphore, ShaderModule,
+        Framebuffer, ImageView, Pipeline, PipelineCache, PipelineLayout, QueryPool, RenderPass,
+        Sampler, Semaphore, ShaderModule,
     },
     Device,
 };
@@ -96,6 +96,12 @@ impl Handle for DescriptorPool {
 impl Handle for Sampler {
     unsafe fn destroy(self, device: &Device) {
         device.destroy_sampler(self, None);
+    }
+}
+
+impl Handle for QueryPool {
+    unsafe fn destroy(self, device: &Device) {
+        device.destroy_query_pool(self, None);
     }
 }
 

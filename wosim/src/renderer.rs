@@ -14,10 +14,17 @@ pub struct Renderer {
 
 pub struct RenderResult {
     pub suboptimal: bool,
+    pub timestamps: Option<RenderTimestamps>,
+}
+
+pub struct RenderTimestamps {
+    pub begin: f64,
+    pub end: f64,
 }
 
 pub struct RenderConfiguration {
     pub depth_format: Format,
+    pub timestamp_period: f64,
 }
 
 impl Renderer {

@@ -13,7 +13,8 @@ use ash::{
 use bytemuck::{bytes_of, Pod};
 
 use super::{
-    Buffer, DescriptorSet, Framebuffer, Image, Object, Pipeline, PipelineLayout, RenderPass,
+    Buffer, DescriptorSet, Framebuffer, Image, Object, Pipeline, PipelineLayout, QueryPool,
+    RenderPass,
 };
 
 pub type CommandPool = Object<vk::CommandPool>;
@@ -253,6 +254,22 @@ impl CommandBuffer {
         }
     }
 
+    pub fn write_timestamp(
+        &self,
+        pipeline_stage: PipelineStageFlags,
+        query_pool: &QueryPool,
+        query: u32,
+    ) {
+        unsafe {
+            self.device.inner.cmd_write_timestamp(
+                self.handle,
+                pipeline_stage,
+                query_pool.handle,
+                query,
+            )
+        }
+    }
+
     pub fn transfer_buffer_to_image(
         &self,
         src: &Buffer,
@@ -292,6 +309,17 @@ impl CommandBuffer {
                 .subresource_range(subresource_range)
                 .build()],
         );
+    }
+
+    pub fn reset_query_pool(&self, pool: &QueryPool, first_query: u32, query_count: u32) {
+        unsafe {
+            self.device.inner.cmd_reset_query_pool(
+                self.handle,
+                pool.handle,
+                first_query,
+                query_count,
+            )
+        }
     }
 }
 

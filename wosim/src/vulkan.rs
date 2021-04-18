@@ -103,7 +103,21 @@ impl DeviceCandidate {
         } else {
             return Ok(None);
         };
-        let render_configuration = RenderConfiguration { depth_format };
+        if properties
+            .vulkan_10
+            .properties
+            .limits
+            .timestamp_compute_and_graphics
+            == FALSE
+        {
+            return Ok(None);
+        }
+        let timestamp_period =
+            properties.vulkan_10.properties.limits.timestamp_period as f64 / 1000000.0;
+        let render_configuration = RenderConfiguration {
+            depth_format,
+            timestamp_period,
+        };
         Ok(Some(Self {
             physical_device,
             device_configuration,

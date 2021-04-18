@@ -3,7 +3,10 @@ use std::{ops::Deref, sync::Arc};
 use ash::{
     prelude::VkResult,
     version::DeviceV1_0,
-    vk::{self, FramebufferCreateFlags, FramebufferCreateInfo, GraphicsPipelineCreateInfo},
+    vk::{
+        self, FramebufferCreateFlags, FramebufferCreateInfo, GraphicsPipelineCreateInfo,
+        QueryResultFlags,
+    },
 };
 
 use super::{DerefHandle, Device, Handle, HandleWrapper};
@@ -41,6 +44,7 @@ pub type Pipeline = Object<vk::Pipeline>;
 pub type PipelineLayout = Object<vk::PipelineLayout>;
 pub type Framebuffer = Object<vk::Framebuffer>;
 pub type Sampler = Object<vk::Sampler>;
+pub type QueryPool = Object<vk::QueryPool>;
 
 impl Fence {
     pub fn wait(&self) -> VkResult<()> {
@@ -115,5 +119,34 @@ impl RenderPass {
             handle,
             device: self.device.clone(),
         })
+    }
+}
+
+impl QueryPool {
+    pub fn results<T: Default + Clone>(
+        &self,
+        first_query: u32,
+        query_count: u32,
+        flags: QueryResultFlags,
+    ) -> VkResult<Option<Vec<T>>> {
+        let mut results = vec![Default::default(); query_count as usize];
+        match unsafe {
+            self.device.inner.get_query_pool_results(
+                self.handle,
+                first_query,
+                query_count,
+                &mut results,
+                flags,
+            )
+        } {
+            Ok(()) => Ok(Some(results)),
+            Err(result) => {
+                if result == vk::Result::NOT_READY {
+                    Ok(None)
+                } else {
+                    Err(result)
+                }
+            }
+        }
     }
 }

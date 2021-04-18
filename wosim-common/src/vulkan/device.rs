@@ -10,9 +10,10 @@ use ash::{
         DescriptorSetLayoutCreateInfo, FenceCreateFlags, FenceCreateInfo, Format, ImageCreateInfo,
         ImageSubresourceRange, ImageViewCreateFlags, ImageViewCreateInfo, ImageViewType,
         PipelineCacheCreateFlags, PipelineCacheCreateInfo, PipelineLayoutCreateFlags,
-        PipelineLayoutCreateInfo, PushConstantRange, Queue, RenderPassCreateInfo,
-        SamplerCreateInfo, SemaphoreCreateInfo, ShaderModuleCreateFlags, ShaderModuleCreateInfo,
-        SubmitInfo, WriteDescriptorSet,
+        PipelineLayoutCreateInfo, PushConstantRange, QueryPipelineStatisticFlags,
+        QueryPoolCreateInfo, QueryType, Queue, RenderPassCreateInfo, SamplerCreateInfo,
+        SemaphoreCreateInfo, ShaderModuleCreateFlags, ShaderModuleCreateInfo, SubmitInfo,
+        WriteDescriptorSet,
     },
 };
 
@@ -23,8 +24,8 @@ use vk_mem::{
 
 use super::{
     Buffer, CommandPool, DescriptorPool, DescriptorSetLayout, Fence, GpuVec, Handle, Image,
-    ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache, PipelineLayout, RenderPass,
-    Sampler, Semaphore, ShaderModule, Swapchain, SwapchainConfiguration,
+    ImageView, PhysicalDevice, PhysicalDeviceFeatures, PipelineCache, PipelineLayout, QueryPool,
+    RenderPass, Sampler, Semaphore, ShaderModule, Swapchain, SwapchainConfiguration,
 };
 
 pub struct Device {
@@ -179,6 +180,23 @@ impl Device {
             .max_sets(max_sets);
         let handle = unsafe { self.inner.create_descriptor_pool(&create_info, None) }?;
         Ok(DescriptorPool {
+            handle,
+            device: self.clone(),
+        })
+    }
+
+    pub fn create_query_pool(
+        self: &Arc<Self>,
+        query_type: QueryType,
+        query_count: u32,
+        pipeline_statistics: QueryPipelineStatisticFlags,
+    ) -> VkResult<QueryPool> {
+        let create_info = QueryPoolCreateInfo::builder()
+            .query_type(query_type)
+            .query_count(query_count)
+            .pipeline_statistics(pipeline_statistics);
+        let handle = unsafe { self.inner.create_query_pool(&create_info, None) }?;
+        Ok(QueryPool {
             handle,
             device: self.clone(),
         })

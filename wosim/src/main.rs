@@ -88,13 +88,14 @@ impl Application {
                     self.context.debug.render(&ctx);
                     self.context.egui.end(&self.window)?;
                 }
-                let resize = match self.renderer.render(&self.device, &mut self.context) {
-                    Ok(result) => result.suboptimal,
+                let result = self.renderer.render(&self.device, &mut self.context);
+                let (resize, timestamps) = match result {
+                    Ok(result) => (result.suboptimal, result.timestamps),
                     Err(err) => match err {
                         Error::Vulkan(vulkan_err) => match vulkan_err {
                             wosim_common::vulkan::Error::ApiResult(result) => {
                                 if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                                    true
+                                    (true, None)
                                 } else {
                                     return Err(Error::Vulkan(vulkan_err));
                                 }
@@ -104,7 +105,7 @@ impl Application {
                         _ => return Err(err),
                     },
                 };
-                self.context.debug.end_frame();
+                self.context.debug.end_frame(timestamps);
                 if resize {
                     self.device.wait_idle()?;
                     self.swapchain = Arc::new(create_swapchain(
