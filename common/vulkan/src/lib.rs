@@ -67,7 +67,7 @@ pub use ash::{
 
 pub use vk_mem::{AllocationCreateFlags, AllocationCreateInfo, AllocationInfo, MemoryUsage};
 
-pub use bytemuck::Pod;
+pub use bytemuck::{bytes_of, Pod, Zeroable};
 
 pub type ApiResult = vk::Result;
 

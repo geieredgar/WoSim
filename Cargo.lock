@@ -1392,7 +1392,6 @@ name = "wosim"
 version = "0.1.0"
 dependencies = [
  "ash-window",
- "bytemuck",
  "copypasta",
  "egui",
  "nalgebra",
