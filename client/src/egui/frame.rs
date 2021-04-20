@@ -2,18 +2,15 @@ use std::{mem::size_of, sync::Arc};
 
 use egui::{epaint::Vertex, ClippedMesh};
 use nalgebra::Vector2;
-use vulkan::{
-    BufferImageCopy, Extent3D, ImageAspectFlags, ImageSubresourceLayers, ImageSubresourceRange,
-    ImageTiling, ImageType,
-};
-
-use wosim_common::vulkan::{
-    self, AccessFlags, AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo,
-    BufferUsageFlags, CommandBuffer, ComponentMapping, ComponentSwizzle, DescriptorImageInfo,
-    DescriptorPool, DescriptorPoolSetup, DescriptorSet, DescriptorType, Device, Extent2D, Format,
-    GpuVec, ImageCreateInfo, ImageLayout, ImageTransferInfo, ImageUsageFlags, ImageViewCreateFlags,
-    ImageViewType, IndexType, MemoryUsage, Offset2D, PipelineBindPoint, PipelineStageFlags, Rect2D,
-    SampleCountFlags, ShaderStageFlags, SharingMode, WriteDescriptorSet,
+use wosim_common_vulkan::{
+    AccessFlags, AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo,
+    BufferImageCopy, BufferUsageFlags, CommandBuffer, ComponentMapping, ComponentSwizzle,
+    DescriptorImageInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet, DescriptorType,
+    Device, Extent2D, Extent3D, Format, GpuVec, ImageAspectFlags, ImageCreateInfo, ImageLayout,
+    ImageSubresourceLayers, ImageSubresourceRange, ImageTiling, ImageTransferInfo, ImageType,
+    ImageUsageFlags, ImageViewCreateFlags, ImageViewType, IndexType, MemoryUsage, Offset2D,
+    PipelineBindPoint, PipelineStageFlags, Rect2D, SampleCountFlags, ShaderStageFlags, SharingMode,
+    WriteDescriptorSet,
 };
 
 use super::{EguiContext, EguiView, Font};
@@ -31,7 +28,7 @@ impl EguiFrame {
         device: &Arc<Device>,
         context: &EguiContext,
         descriptor_pool: &DescriptorPool,
-    ) -> Result<Self, vulkan::Error> {
+    ) -> Result<Self, wosim_common_vulkan::Error> {
         let mut descriptor_sets = descriptor_pool.allocate(&[&context.set_layout])?;
         let descriptor_set = descriptor_sets.remove(0);
         Ok(Self {
@@ -56,7 +53,7 @@ impl EguiFrame {
         device: &Arc<Device>,
         command_buffer: &CommandBuffer,
         context: &mut EguiContext,
-    ) -> Result<(), vulkan::Error> {
+    ) -> Result<(), wosim_common_vulkan::Error> {
         self._staging_buffer = None;
         if !context.enabled {
             return Ok(());
@@ -184,7 +181,7 @@ impl EguiFrame {
         view: &EguiView,
         context: &mut EguiContext,
         extent: Extent2D,
-    ) -> Result<(), vulkan::Error> {
+    ) -> Result<(), wosim_common_vulkan::Error> {
         if !context.enabled {
             return Ok(());
         }

@@ -1,4 +1,4 @@
-use wosim_common::vulkan::{Image, ImageView};
+use wosim_common_vulkan::{Image, ImageView};
 
 pub(super) struct Font {
     pub view: ImageView,

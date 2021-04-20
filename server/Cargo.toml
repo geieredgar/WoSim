@@ -9,6 +9,7 @@ edition = "2018"
 
 [dependencies]
 wosim-common = { path = "../common/base" }
+wosim-common-vulkan = { path = "../common/vulkan" }
 
 
 [[bin]]

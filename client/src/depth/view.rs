@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common::vulkan::{
+use wosim_common_vulkan::{
     Device, Filter, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode,
     SamplerReductionMode, SamplerReductionModeCreateInfo, VkResult,
 };

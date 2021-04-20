@@ -1,11 +1,10 @@
 use std::cmp::{Ordering, Reverse};
 
-use vulkan::{PhysicalDeviceFeatures, FALSE, TRUE};
-use wosim_common::vulkan::{
-    self, cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration, Format,
+use wosim_common_vulkan::{
+    cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration, Format,
     FormatFeatureFlags, ImageTiling, KhrPortabilitySubsetFn, PhysicalDevice,
-    PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface, SurfaceFormatKHR, Swapchain,
-    VkResult,
+    PhysicalDeviceFeatures, PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface,
+    SurfaceFormatKHR, Swapchain, VkResult, FALSE, TRUE,
 };
 
 use crate::renderer::RenderConfiguration;
@@ -150,7 +149,7 @@ impl DeviceCandidate {
         }))
     }
 
-    pub fn create(self) -> Result<(Device, RenderConfiguration), vulkan::Error> {
+    pub fn create(self) -> Result<(Device, RenderConfiguration), wosim_common_vulkan::Error> {
         Ok((
             self.physical_device.create(self.device_configuration)?,
             self.render_configuration,

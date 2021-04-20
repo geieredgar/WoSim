@@ -1,14 +1,12 @@
 use std::{ffi::CString, mem::size_of, sync::Arc};
 
 use bytemuck::{bytes_of, Pod, Zeroable};
-use wosim_common::{
-    shader::align_bytes,
-    vulkan::{
-        Bool32, ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
-        DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
-        PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,
-        ShaderModuleCreateFlags, ShaderStageFlags, SpecializationInfo, SpecializationMapEntry,
-    },
+use wosim_common::shader::align_bytes;
+use wosim_common_vulkan::{
+    Bool32, ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
+    DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
+    PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,
+    ShaderModuleCreateFlags, ShaderStageFlags, SpecializationInfo, SpecializationMapEntry,
 };
 
 use crate::{error::Error, shaders::CULL_COMP};

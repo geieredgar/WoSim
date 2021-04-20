@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use wosim_common::{
-    shader::align_bytes,
-    vulkan::{
-        self, BufferUsageFlags, DescriptorSetLayout, DescriptorSetLayoutBinding,
-        DescriptorSetLayoutCreateFlags, DescriptorType, Device, GpuVec, MemoryUsage,
-        PipelineLayout, PipelineLayoutCreateFlags, ShaderModule, ShaderModuleCreateFlags,
-        ShaderStageFlags,
-    },
+use wosim_common::shader::align_bytes;
+use wosim_common_vulkan::{
+    BufferUsageFlags, DescriptorSetLayout, DescriptorSetLayoutBinding,
+    DescriptorSetLayoutCreateFlags, DescriptorType, Device, GpuVec, MemoryUsage, PipelineLayout,
+    PipelineLayoutCreateFlags, ShaderModule, ShaderModuleCreateFlags, ShaderStageFlags,
 };
 
 use crate::{
@@ -117,7 +114,7 @@ impl SceneContext {
         model_index
     }
 
-    pub fn flush(&self) -> Result<(), vulkan::Error> {
+    pub fn flush(&self) -> Result<(), wosim_common_vulkan::Error> {
         self.vertices.flush()?;
         self.vertex_indices.flush()?;
         self.models.flush()?;

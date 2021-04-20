@@ -12,11 +12,9 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use wosim_common::{
-    iterator::MaxOkFilterMap,
-    vulkan::{
-        ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
-    },
+use wosim_common::iterator::MaxOkFilterMap;
+use wosim_common_vulkan::{
+    ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
 
 mod context;
@@ -191,7 +189,7 @@ impl Application {
                     Ok(result) => (result.suboptimal, result.timestamps),
                     Err(err) => match err {
                         Error::Vulkan(vulkan_err) => match vulkan_err {
-                            wosim_common::vulkan::Error::ApiResult(result) => {
+                            wosim_common_vulkan::Error::ApiResult(result) => {
                                 if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
                                     (true, None)
                                 } else {

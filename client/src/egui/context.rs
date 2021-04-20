@@ -11,14 +11,12 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
-use wosim_common::{
-    shader::align_bytes,
-    vulkan::{
-        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
-        DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags,
-        PushConstantRange, Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode,
-        ShaderModule, ShaderModuleCreateFlags, ShaderStageFlags, LOD_CLAMP_NONE,
-    },
+use wosim_common::shader::align_bytes;
+use wosim_common_vulkan::{
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
+    DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags, PushConstantRange,
+    Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode, ShaderModule,
+    ShaderModuleCreateFlags, ShaderStageFlags, LOD_CLAMP_NONE,
 };
 
 use crate::{

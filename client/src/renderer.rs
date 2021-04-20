@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common::vulkan::{Device, Format, Swapchain};
+use wosim_common_vulkan::{Device, Format, Swapchain};
 
 use crate::{context::Context, error::Error, frame::Frame, view::View};
 

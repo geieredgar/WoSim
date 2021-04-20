@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 
-use wosim_common::vulkan::{Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE};
+use wosim_common_vulkan::{Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE};
 
 use crate::{
     cull::CullContext,

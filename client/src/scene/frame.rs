@@ -1,8 +1,8 @@
 use std::{mem::size_of, sync::Arc};
 
 use nalgebra::base::Matrix4;
-use wosim_common::vulkan::{
-    self, AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo, BufferUsageFlags,
+use wosim_common_vulkan::{
+    AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo, BufferUsageFlags,
     CommandBuffer, DescriptorBufferInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet,
     DescriptorType, Device, DrawIndexedIndirectCommand, Extent2D, GpuVariable, GpuVec, IndexType,
     MemoryPropertyFlags, MemoryUsage, PipelineBindPoint, SubpassContents, WriteDescriptorSet,
@@ -28,7 +28,7 @@ impl SceneFrame {
         context: &SceneContext,
         object_capacity: usize,
         descriptor_pool: &DescriptorPool,
-    ) -> Result<Self, vulkan::Error> {
+    ) -> Result<Self, wosim_common_vulkan::Error> {
         let mut descriptor_sets = descriptor_pool.allocate(&[&context.set_layout])?;
         let descriptor_set = descriptor_sets.remove(0);
         let constants = device.create_variable(
@@ -113,7 +113,7 @@ impl SceneFrame {
         &mut self,
         context: &SceneContext,
         extent: Extent2D,
-    ) -> Result<u32, vulkan::Error> {
+    ) -> Result<u32, wosim_common_vulkan::Error> {
         let aspect = (extent.width as f32) / (extent.height as f32);
         let h = (context.camera.fovy / 2.0).tan();
         let w = h * aspect;

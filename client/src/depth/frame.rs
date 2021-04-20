@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use wosim_common::vulkan::{
-    self, AllocationCreateFlags, AllocationCreateInfo, ComponentMapping, DescriptorImageInfo,
+use wosim_common_vulkan::{
+    AllocationCreateFlags, AllocationCreateInfo, ComponentMapping, DescriptorImageInfo,
     DescriptorPool, DescriptorPoolSetup, DescriptorSet, DescriptorType, Device, Extent2D, Extent3D,
     Image, ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageSubresourceRange, ImageTiling,
     ImageType, ImageUsageFlags, ImageView, ImageViewCreateFlags, ImageViewType,
@@ -30,7 +30,7 @@ impl DepthFrame {
         configuration: &RenderConfiguration,
         descriptor_pool: &DescriptorPool,
         image_extent: Extent2D,
-    ) -> Result<Self, vulkan::Error> {
+    ) -> Result<Self, wosim_common_vulkan::Error> {
         let allocation_info = AllocationCreateInfo {
             usage: MemoryUsage::GpuOnly,
             flags: AllocationCreateFlags::empty(),

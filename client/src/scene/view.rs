@@ -1,6 +1,6 @@
 use std::{ffi::CString, mem::size_of};
 
-use wosim_common::vulkan::{
+use wosim_common_vulkan::{
     BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags, Extent2D, Format,
     FrontFace, GraphicsPipelineCreateInfo, LogicOp, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,

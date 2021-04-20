@@ -1,13 +1,11 @@
 use std::{ffi::CString, sync::Arc};
 
-use wosim_common::{
-    shader::align_bytes,
-    vulkan::{
-        ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
-        DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
-        PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,
-        ShaderModuleCreateFlags, ShaderStageFlags,
-    },
+use wosim_common::shader::align_bytes;
+use wosim_common_vulkan::{
+    ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
+    DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
+    PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,
+    ShaderModuleCreateFlags, ShaderStageFlags,
 };
 
 use crate::{error::Error, shaders::DEPTH_PYRAMID_COMP};

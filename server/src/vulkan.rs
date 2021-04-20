@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 
-use wosim_common::vulkan::{
-    self, cmp_device_types, contains_extension, Device, DeviceConfiguration,
-    KhrPortabilitySubsetFn, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceProperties,
-    QueueFamilyProperties, QueueFlags, VkResult,
+use wosim_common_vulkan::{
+    cmp_device_types, contains_extension, Device, DeviceConfiguration, KhrPortabilitySubsetFn,
+    PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceProperties, QueueFamilyProperties,
+    QueueFlags, VkResult,
 };
 
 pub struct DeviceCandidate {
@@ -56,7 +56,7 @@ impl DeviceCandidate {
         }))
     }
 
-    pub fn create(self) -> Result<Device, vulkan::Error> {
+    pub fn create(self) -> Result<Device, wosim_common_vulkan::Error> {
         self.physical_device.create(self.device_configuration)
     }
 }
