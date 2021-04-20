@@ -15,7 +15,7 @@ egui = "0.11.0"
 nalgebra = "0.26.1"
 webbrowser = "0.5.5"
 winit = "0.24"
-wosim-common = { path = "../common" }
+wosim-common = { path = "../common/base" }
 wosim-server = { path = "../server" }
 
 [build-dependencies]
