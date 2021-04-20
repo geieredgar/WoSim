@@ -1,13 +1,13 @@
-use wosim_common_vulkan::ApiResult;
+use vulkan::ApiResult;
 
 #[derive(Debug)]
 pub enum Error {
-    Vulkan(wosim_common_vulkan::Error),
+    Vulkan(vulkan::Error),
     NoSuitableDeviceFound,
 }
 
-impl From<wosim_common_vulkan::Error> for Error {
-    fn from(error: wosim_common_vulkan::Error) -> Self {
+impl From<vulkan::Error> for Error {
+    fn from(error: vulkan::Error) -> Self {
         Self::Vulkan(error)
     }
 }

@@ -1,11 +1,11 @@
 use std::io;
 
+use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
-use wosim_common_vulkan::ApiResult;
 
 #[derive(Debug)]
 pub enum Error {
-    Vulkan(wosim_common_vulkan::Error),
+    Vulkan(vulkan::Error),
     Os(OsError),
     Io(io::Error),
     Egui(super::egui::Error),
@@ -15,8 +15,8 @@ pub enum Error {
     NoSuitablePresentMode,
 }
 
-impl From<wosim_common_vulkan::Error> for Error {
-    fn from(error: wosim_common_vulkan::Error) -> Self {
+impl From<vulkan::Error> for Error {
+    fn from(error: vulkan::Error) -> Self {
         Self::Vulkan(error)
     }
 }

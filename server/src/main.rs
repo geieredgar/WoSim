@@ -1,7 +1,7 @@
 use std::{ffi::CString, sync::Arc};
 
-use wosim_common_base::iterator::MaxOkFilterMap;
-use wosim_common_vulkan::{Instance, Version};
+use common::iterator::MaxOkFilterMap;
+use vulkan::{Instance, Version};
 use wosim_server::{DeviceCandidate, Error};
 
 fn main() -> Result<(), Error> {

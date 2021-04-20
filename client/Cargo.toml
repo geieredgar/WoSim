@@ -14,9 +14,9 @@ egui = "0.11.0"
 nalgebra = "0.26.1"
 webbrowser = "0.5.5"
 winit = "0.24"
-wosim-common-base = { path = "../common/base" }
-wosim-common-vulkan = { path = "../common/vulkan" }
-wosim-server = { path = "../server" }
+common = { path = "../common/base", package = "wosim-common-base" }
+vulkan = { path = "../common/vulkan", package = "wosim-common-vulkan" }
+server = { path = "../server", package = "wosim-server" }
 
 [build-dependencies]
 wosim-common-build = { path = "../common/build" }

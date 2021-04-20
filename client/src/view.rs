@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common_vulkan::{
+use vulkan::{
     mip_levels_for_extent, AccessFlags, AttachmentDescription, AttachmentLoadOp,
     AttachmentReference, AttachmentStoreOp, DescriptorPool, Device, ImageLayout, PipelineBindPoint,
     PipelineStageFlags, RenderPass, RenderPassCreateInfo, SampleCountFlags, SubpassDependency,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common_vulkan::{
+use vulkan::{
     ApiResult, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool, DescriptorPoolSetup,
     DescriptorSet, DescriptorType, Device, ImageLayout, WriteDescriptorSet, WHOLE_SIZE,
 };

@@ -1,6 +1,6 @@
 use std::cmp::{Ordering, Reverse};
 
-use wosim_common_vulkan::{
+use vulkan::{
     cmp_device_types, contains_extension, ColorSpaceKHR, Device, DeviceConfiguration, Format,
     FormatFeatureFlags, ImageTiling, KhrPortabilitySubsetFn, PhysicalDevice,
     PhysicalDeviceFeatures, PhysicalDeviceProperties, PresentModeKHR, QueueFlags, Surface,
@@ -149,7 +149,7 @@ impl DeviceCandidate {
         }))
     }
 
-    pub fn create(self) -> Result<(Device, RenderConfiguration), wosim_common_vulkan::Error> {
+    pub fn create(self) -> Result<(Device, RenderConfiguration), vulkan::Error> {
         Ok((
             self.physical_device.create(self.device_configuration)?,
             self.render_configuration,

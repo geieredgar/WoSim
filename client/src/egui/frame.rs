@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use egui::{epaint::Vertex, ClippedMesh};
 use nalgebra::Vector2;
-use wosim_common_vulkan::{
+use vulkan::{
     AccessFlags, AllocationCreateFlags, AllocationCreateInfo, Buffer, BufferCreateInfo,
     BufferImageCopy, BufferUsageFlags, CommandBuffer, ComponentMapping, ComponentSwizzle,
     DescriptorImageInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet, DescriptorType,
@@ -28,7 +28,7 @@ impl EguiFrame {
         device: &Arc<Device>,
         context: &EguiContext,
         descriptor_pool: &DescriptorPool,
-    ) -> Result<Self, wosim_common_vulkan::Error> {
+    ) -> Result<Self, vulkan::Error> {
         let mut descriptor_sets = descriptor_pool.allocate(&[&context.set_layout])?;
         let descriptor_set = descriptor_sets.remove(0);
         Ok(Self {
@@ -53,7 +53,7 @@ impl EguiFrame {
         device: &Arc<Device>,
         command_buffer: &CommandBuffer,
         context: &mut EguiContext,
-    ) -> Result<(), wosim_common_vulkan::Error> {
+    ) -> Result<(), vulkan::Error> {
         self._staging_buffer = None;
         if !context.enabled {
             return Ok(());
@@ -181,7 +181,7 @@ impl EguiFrame {
         view: &EguiView,
         context: &mut EguiContext,
         extent: Extent2D,
-    ) -> Result<(), wosim_common_vulkan::Error> {
+    ) -> Result<(), vulkan::Error> {
         if !context.enabled {
             return Ok(());
         }

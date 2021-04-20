@@ -1,20 +1,20 @@
 use std::{ffi::CString, sync::Arc, time::Instant};
 
+use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
+use ::vulkan::{
+    ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
+};
 use ash_window::{create_surface, enumerate_required_extensions};
+use common::iterator::MaxOkFilterMap;
 use context::Context;
 use error::Error;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
-use vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, Window, WindowBuilder},
-};
-use wosim_common_base::iterator::MaxOkFilterMap;
-use wosim_common_vulkan::{
-    ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
 
 mod context;
@@ -189,7 +189,7 @@ impl Application {
                     Ok(result) => (result.suboptimal, result.timestamps),
                     Err(err) => match err {
                         Error::Vulkan(vulkan_err) => match vulkan_err {
-                            wosim_common_vulkan::Error::ApiResult(result) => {
+                            ::vulkan::Error::ApiResult(result) => {
                                 if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
                                     (true, None)
                                 } else {

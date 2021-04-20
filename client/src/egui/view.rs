@@ -1,6 +1,6 @@
 use std::{ffi::CString, sync::Arc};
 
-use wosim_common_vulkan::{
+use vulkan::{
     BlendFactor, BlendOp, ColorComponentFlags, CullModeFlags, Device, DynamicState, Extent2D,
     Format, GraphicsPipelineCreateInfo, LogicOp, Offset2D, Pipeline, PipelineCache,
     PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo,

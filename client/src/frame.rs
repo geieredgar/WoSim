@@ -1,6 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
-use wosim_common_vulkan::{
+use vulkan::{
     AccessFlags, ApiResult, BufferCopy, BufferMemoryBarrier, ClearColorValue,
     ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferLevel, CommandBufferUsageFlags,
     CommandPool, CommandPoolCreateFlags, CommandPoolResetFlags, DependencyFlags,

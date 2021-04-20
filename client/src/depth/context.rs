@@ -1,7 +1,7 @@
 use std::{ffi::CString, sync::Arc};
 
-use wosim_common_base::shader::align_bytes;
-use wosim_common_vulkan::{
+use common::shader::align_bytes;
+use vulkan::{
     ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
     DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
     PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,

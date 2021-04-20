@@ -11,8 +11,8 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
-use wosim_common_base::shader::align_bytes;
-use wosim_common_vulkan::{
+use common::shader::align_bytes;
+use vulkan::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
     DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags, PushConstantRange,
     Sampler, SamplerAddressMode, SamplerCreateInfo, SamplerMipmapMode, ShaderModule,

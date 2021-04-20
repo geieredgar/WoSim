@@ -8,9 +8,8 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-wosim-common-base = { path = "../common/base" }
-wosim-common-vulkan = { path = "../common/vulkan" }
-
+common = { path = "../common/base", package = "wosim-common-base" }
+vulkan = { path = "../common/vulkan", package = "wosim-common-vulkan" }
 
 [[bin]]
 name = "wosim-server"
