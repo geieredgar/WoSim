@@ -19,4 +19,4 @@ vulkan = { path = "../common/vulkan", package = "wosim-common-vulkan" }
 server = { path = "../server", package = "wosim-server" }
 
 [build-dependencies]
-wosim-common-build = { path = "../common/build" }
+build = { path = "../common/build", package = "wosim-common-build" }
