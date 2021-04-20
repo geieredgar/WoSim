@@ -156,8 +156,8 @@ impl View {
         let depth = DepthView::new(device, depth_pyramid_mip_levels)?;
         Ok(Self {
             depth,
-            scene,
             egui,
+            scene,
             descriptor_pool,
             render_pass,
             images,

@@ -124,13 +124,13 @@ impl Context {
             &pipeline_cache,
         )?;
         Ok(Self {
+            cull,
+            depth,
+            scene,
             pipeline_cache,
             configuration,
             egui,
             debug,
-            cull,
-            depth,
-            scene,
         })
     }
 }

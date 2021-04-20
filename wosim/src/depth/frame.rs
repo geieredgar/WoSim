@@ -177,12 +177,12 @@ impl DepthFrame {
         device.update_descriptor_sets(&descriptor_writes, &[]);
         let ready = device.create_semaphore()?;
         Ok(Self {
-            descriptor_sets,
-            pyramid_image,
             pyramid_views,
             pyramid_view,
+            pyramid_image,
             image_view,
             image,
+            descriptor_sets,
             ready,
         })
     }

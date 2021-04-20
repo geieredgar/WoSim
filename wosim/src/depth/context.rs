@@ -60,9 +60,9 @@ impl DepthContext {
         let pipeline = pipelines.remove(0);
         Ok(Self {
             pipeline,
-            shader_module,
-            set_layout,
             pipeline_layout,
+            set_layout,
+            shader_module,
         })
     }
 }
