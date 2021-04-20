@@ -12,7 +12,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use wosim_common::iterator::MaxOkFilterMap;
+use wosim_common_base::iterator::MaxOkFilterMap;
 use wosim_common_vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };

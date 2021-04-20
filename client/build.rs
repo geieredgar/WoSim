@@ -1,4 +1,4 @@
-use wosim_build::{new_shader_compiler, CompilerExt, Error};
+use wosim_common_build::{new_shader_compiler, CompilerExt, Error};
 
 fn main() -> Result<(), Error> {
     let mut compiler = new_shader_compiler()?;

@@ -1,7 +1,7 @@
 use std::{ffi::CString, mem::size_of, sync::Arc};
 
 use bytemuck::{bytes_of, Pod, Zeroable};
-use wosim_common::shader::align_bytes;
+use wosim_common_base::shader::align_bytes;
 use wosim_common_vulkan::{
     Bool32, ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
     DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,

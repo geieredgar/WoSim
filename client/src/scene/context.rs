@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use wosim_common::shader::align_bytes;
+use wosim_common_base::shader::align_bytes;
 use wosim_common_vulkan::{
     BufferUsageFlags, DescriptorSetLayout, DescriptorSetLayoutBinding,
     DescriptorSetLayoutCreateFlags, DescriptorType, Device, GpuVec, MemoryUsage, PipelineLayout,

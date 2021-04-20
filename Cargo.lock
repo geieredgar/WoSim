@@ -1398,25 +1398,25 @@ dependencies = [
  "nalgebra",
  "webbrowser",
  "winit",
- "wosim-build",
- "wosim-common",
+ "wosim-common-base",
+ "wosim-common-build",
  "wosim-common-vulkan",
  "wosim-server",
 ]
 
 [[package]]
-name = "wosim-build"
-version = "0.1.0"
-dependencies = [
- "shaderc",
-]
-
-[[package]]
-name = "wosim-common"
+name = "wosim-common-base"
 version = "0.1.0"
 dependencies = [
  "cfg-if 1.0.0",
  "memmap",
+]
+
+[[package]]
+name = "wosim-common-build"
+version = "0.1.0"
+dependencies = [
+ "shaderc",
 ]
 
 [[package]]
@@ -1432,7 +1432,7 @@ dependencies = [
 name = "wosim-server"
 version = "0.1.0"
 dependencies = [
- "wosim-common",
+ "wosim-common-base",
  "wosim-common-vulkan",
 ]
 
