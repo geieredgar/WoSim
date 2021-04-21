@@ -1,6 +1,6 @@
 use std::{ffi::CString, sync::Arc};
 
-use common::iterator::MaxOkFilterMap;
+use util::iterator::MaxOkFilterMap;
 use vulkan::{Instance, Version};
 use wosim_server::{DeviceCandidate, Error};
 

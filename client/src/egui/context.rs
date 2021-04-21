@@ -11,7 +11,7 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
-use common::shader::align_bytes;
+use util::shader::align_bytes;
 use vulkan::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
     DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags, PushConstantRange,

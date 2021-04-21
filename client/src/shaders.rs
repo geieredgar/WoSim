@@ -1,4 +1,4 @@
-use common::{asset::AssetLoader, include_shader};
+use util::{asset::AssetLoader, include_shader};
 
 pub const CULL_COMP: AssetLoader = include_shader!("cull.comp");
 pub const DEPTH_PYRAMID_COMP: AssetLoader = include_shader!("depth_pyramid.comp");

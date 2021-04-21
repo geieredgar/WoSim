@@ -5,12 +5,12 @@ use ::vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
 use ash_window::{create_surface, enumerate_required_extensions};
-use common::iterator::MaxOkFilterMap;
 use context::Context;
 use error::Error;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
+use util::iterator::MaxOkFilterMap;
 use winit::{
     event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},

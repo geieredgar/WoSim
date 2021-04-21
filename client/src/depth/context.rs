@@ -1,6 +1,6 @@
 use std::{ffi::CString, sync::Arc};
 
-use common::shader::align_bytes;
+use util::shader::align_bytes;
 use vulkan::{
     ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
     DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,

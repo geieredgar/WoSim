@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use common::shader::align_bytes;
+use util::shader::align_bytes;
 use vulkan::{
     BufferUsageFlags, DescriptorSetLayout, DescriptorSetLayoutBinding,
     DescriptorSetLayoutCreateFlags, DescriptorType, Device, GpuVec, MemoryUsage, PipelineLayout,
