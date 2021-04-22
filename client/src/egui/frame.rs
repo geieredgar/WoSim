@@ -55,7 +55,7 @@ impl EguiFrame {
         context: &mut EguiContext,
     ) -> Result<(), vulkan::Error> {
         self._staging_buffer = None;
-        if !context.enabled {
+        if context.meshes.is_empty() {
             return Ok(());
         }
         let texture = context.inner.fonts().texture();
@@ -182,7 +182,7 @@ impl EguiFrame {
         context: &mut EguiContext,
         extent: Extent2D,
     ) -> Result<(), vulkan::Error> {
-        if !context.enabled {
+        if context.meshes.is_empty() {
             return Ok(());
         }
         let mut index_count = 0;

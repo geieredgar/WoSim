@@ -1,9 +1,12 @@
 use std::{ffi::CString, sync::Arc, time::Instant};
 
+use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
+use crate::winit::run;
 use ::vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
 use ::winit::{
+    dpi::{PhysicalPosition, Position},
     event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
     window::{Fullscreen, Window, WindowBuilder},
@@ -18,9 +21,6 @@ use scene::ControlState;
 use tokio::runtime::Runtime;
 use util::iterator::MaxOkFilterMap;
 
-use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use crate::winit::run;
-
 mod context;
 mod cull;
 mod debug;
@@ -34,6 +34,8 @@ mod shaders;
 mod view;
 mod vulkan;
 mod winit;
+
+pub use crate::winit::EventResult;
 
 struct Application {
     renderer: Renderer,
@@ -105,7 +107,12 @@ impl winit::Application for Application {
         event: Event<()>,
         _target: &EventLoopWindowTarget<()>,
     ) -> Result<ControlFlow, Error> {
-        self.context.egui.handle_event(&event);
+        if self.handle_early_mouse_grab(&event).is_handled() {
+            return Ok(ControlFlow::Poll);
+        }
+        if self.context.egui.handle_event(&event).is_handled() {
+            return Ok(ControlFlow::Poll);
+        }
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::Resized(_) => {
@@ -133,10 +140,8 @@ impl winit::Application for Application {
                                 self.control_state.right = input.state == ElementState::Pressed;
                             }
                             VirtualKeyCode::F1 => {
-                                if input.state == ElementState::Pressed
-                                    && self.context.egui.is_enabled()
-                                {
-                                    self.set_grab(false)?;
+                                if input.state == ElementState::Pressed {
+                                    self.context.debug.enabled = !self.context.debug.enabled;
                                 }
                             }
                             VirtualKeyCode::F9 => {
@@ -155,13 +160,13 @@ impl winit::Application for Application {
                                     }
                                 }
                             }
-                            VirtualKeyCode::Escape => return Ok(ControlFlow::Exit),
+                            VirtualKeyCode::Escape => self.set_grab(false)?,
                             _ => {}
                         }
                     }
                 }
                 WindowEvent::MouseInput { button, .. } => {
-                    if button == MouseButton::Left && !self.context.egui.is_enabled() {
+                    if button == MouseButton::Left {
                         self.set_grab(true)?;
                     };
                 }
@@ -192,10 +197,11 @@ impl winit::Application for Application {
             Event::MainEventsCleared => {
                 self.update();
                 self.context.debug.begin_frame();
-                if let Some(ctx) = self.context.egui.begin() {
-                    self.context.debug.render(&ctx);
-                    self.context.egui.end(&self.window)?;
-                }
+                let ctx = self.context.egui.begin();
+                self.context.debug.render(&ctx);
+                self.context
+                    .egui
+                    .end(if self.grab { None } else { Some(&self.window) })?;
                 let result = self.renderer.render(&self.device, &mut self.context);
                 let (resize, timestamps) = match result {
                     Ok(result) => (result.suboptimal, result.timestamps),
@@ -225,6 +231,19 @@ impl winit::Application for Application {
 }
 
 impl Application {
+    fn handle_early_mouse_grab(&mut self, event: &Event<()>) -> EventResult {
+        if self.grab {
+            if let Event::WindowEvent {
+                event: WindowEvent::CursorMoved { .. },
+                ..
+            } = event
+            {
+                return EventResult::Handled;
+            }
+        }
+        EventResult::Unhandled
+    }
+
     fn recreate_renderer(&mut self) -> Result<(), Error> {
         self.device.wait_idle()?;
         self.swapchain = Arc::new(create_swapchain(
@@ -290,6 +309,13 @@ impl Application {
             self.window.set_cursor_visible(false);
             self.window.set_cursor_grab(true)?;
         } else {
+            let size = self.window.inner_size();
+            let position = PhysicalPosition {
+                x: size.width as i32 / 2,
+                y: size.height as i32 / 2,
+            };
+            self.window
+                .set_cursor_position(Position::Physical(position))?;
             self.window.set_cursor_visible(true);
             self.window.set_cursor_grab(false)?;
         }

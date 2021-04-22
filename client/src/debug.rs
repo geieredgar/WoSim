@@ -23,6 +23,7 @@ pub struct DebugContext {
     frame_times_secs: f64,
     show_cpu_time: bool,
     show_gpu_time: bool,
+    pub enabled: bool,
     pub rotate_cubes: bool,
 }
 
@@ -38,6 +39,7 @@ impl DebugContext {
             frame_times_secs: 10.0,
             show_cpu_time: true,
             show_gpu_time: true,
+            enabled: false,
             rotate_cubes: false,
         }
     }
@@ -68,6 +70,9 @@ impl DebugContext {
     }
 
     pub fn render(&mut self, ctx: &CtxRef) {
+        if !self.enabled {
+            return;
+        }
         Window::new("Debug info").show(ctx, |ui| {
             ui.checkbox(&mut self.rotate_cubes, "Rotate cubes");
             ui.label(format!(

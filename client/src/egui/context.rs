@@ -22,6 +22,7 @@ use vulkan::{
 use crate::{
     error::Error,
     shaders::{EGUI_FRAG, EGUI_VERT},
+    EventResult,
 };
 
 use super::Font;
@@ -34,7 +35,6 @@ pub struct EguiContext {
     pub(super) fragment_shader_module: ShaderModule,
     pub(super) sampler: Sampler,
     pub(super) meshes: Arc<Vec<ClippedMesh>>,
-    pub(super) enabled: bool,
     pub(super) set_layout: DescriptorSetLayout,
     pub(super) font: Option<Arc<Font>>,
     cursor_pos: Pos2,
@@ -103,7 +103,6 @@ impl EguiContext {
             vertex_shader_module,
             fragment_shader_module,
             pipeline_layout,
-            enabled: false,
             set_layout,
             sampler,
             font: None,
@@ -113,25 +112,7 @@ impl EguiContext {
         })
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-
-    pub fn handle_event(&mut self, event: &winit::event::Event<()>) {
-        if !self.enabled {
-            if let winit::event::Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                ..
-            } = event
-            {
-                if let Some(VirtualKeyCode::F1) = input.virtual_keycode {
-                    if input.state == ElementState::Pressed {
-                        self.enabled = true;
-                    }
-                }
-            }
-            return;
-        }
+    pub fn handle_event(&mut self, event: &winit::event::Event<()>) -> EventResult {
         if let winit::event::Event::WindowEvent { event, .. } = event {
             match event {
                 WindowEvent::Resized(size) => {
@@ -148,25 +129,28 @@ impl EguiContext {
                     ));
                 }
                 WindowEvent::ReceivedCharacter(c) => {
-                    if !c.is_ascii_control() {
-                        self.input.events.push(Event::Text(c.to_string()))
+                    if self.inner.wants_keyboard_input() && !c.is_ascii_control() {
+                        self.input.events.push(Event::Text(c.to_string()));
+                        return EventResult::Handled;
                     }
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
-                    if let Some(code) = input.virtual_keycode {
-                        if let Some(key) = key(code) {
-                            self.input.events.push(Event::Key {
-                                key,
-                                pressed: input.state == ElementState::Pressed,
-                                modifiers: self.modifiers,
-                            })
-                        }
-                        if code == VirtualKeyCode::F1 && input.state == ElementState::Pressed {
-                            self.enabled = false;
+                    if self.inner.wants_keyboard_input() {
+                        if let Some(code) = input.virtual_keycode {
+                            if let Some(key) = key(code) {
+                                self.input.events.push(Event::Key {
+                                    key,
+                                    pressed: input.state == ElementState::Pressed,
+                                    modifiers: self.modifiers,
+                                });
+                                return EventResult::Handled;
+                            }
                         }
                     }
                 }
-                WindowEvent::ModifiersChanged(state) => self.modifiers = modifiers(*state),
+                WindowEvent::ModifiersChanged(state) => {
+                    self.modifiers = modifiers(*state);
+                }
                 WindowEvent::CursorMoved { position, .. } => {
                     let scale_factor = self.scale_factor();
                     self.cursor_pos = Pos2 {
@@ -180,17 +164,19 @@ impl EguiContext {
                 WindowEvent::CursorLeft { .. } => {
                     self.input.events.push(Event::PointerGone);
                 }
-                WindowEvent::MouseWheel { delta, .. } => match *delta {
-                    MouseScrollDelta::LineDelta(x, y) => {
-                        self.input.scroll_delta = Vec2 { x, y } * 24.0;
-                    }
-                    MouseScrollDelta::PixelDelta(delta) => {
-                        self.input.scroll_delta = Vec2 {
-                            x: delta.x as f32,
-                            y: delta.y as f32,
-                        };
-                    }
-                },
+                WindowEvent::MouseWheel { delta, .. } => {
+                    match *delta {
+                        MouseScrollDelta::LineDelta(x, y) => {
+                            self.input.scroll_delta = Vec2 { x, y } * 24.0;
+                        }
+                        MouseScrollDelta::PixelDelta(delta) => {
+                            self.input.scroll_delta = Vec2 {
+                                x: delta.x as f32,
+                                y: delta.y as f32,
+                            };
+                        }
+                    };
+                }
                 WindowEvent::MouseInput { state, button, .. } => {
                     if let Some(button) = pointer_button(*button) {
                         self.input.events.push(Event::PointerButton {
@@ -199,6 +185,9 @@ impl EguiContext {
                             pressed: *state == ElementState::Pressed,
                             modifiers: self.modifiers,
                         });
+                        if self.inner.wants_pointer_input() {
+                            return EventResult::Handled;
+                        }
                     }
                 }
                 WindowEvent::ScaleFactorChanged {
@@ -217,26 +206,25 @@ impl EguiContext {
                 _ => {}
             }
         }
+        EventResult::Unhandled
     }
 
-    pub fn begin(&mut self) -> Option<CtxRef> {
-        if self.enabled {
-            self.inner.begin_frame(self.input.take());
-            Some(self.inner.clone())
-        } else {
-            None
-        }
+    pub fn begin(&mut self) -> CtxRef {
+        self.inner.begin_frame(self.input.take());
+        self.inner.clone()
     }
 
-    pub fn end(&mut self, window: &Window) -> Result<(), Error> {
+    pub fn end(&mut self, window: Option<&Window>) -> Result<(), Error> {
         let (output, shapes) = self.inner.end_frame();
         let meshes = Arc::new(self.inner.tessellate(shapes));
         self.meshes = meshes;
-        if let Some(icon) = cursor(output.cursor_icon) {
-            window.set_cursor_icon(icon);
-            window.set_cursor_visible(true);
-        } else {
-            window.set_cursor_visible(false);
+        if let Some(window) = window {
+            if let Some(icon) = cursor(output.cursor_icon) {
+                window.set_cursor_icon(icon);
+                window.set_cursor_visible(true);
+            } else {
+                window.set_cursor_visible(false);
+            }
         }
         if !output.copied_text.is_empty() {
             self.clipboard

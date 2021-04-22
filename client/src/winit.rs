@@ -12,6 +12,21 @@ use winit::{
     event_loop::{ControlFlow, EventLoop, EventLoopProxy, EventLoopWindowTarget},
 };
 
+#[derive(Clone, Copy)]
+pub enum EventResult {
+    Handled,
+    Unhandled,
+}
+
+impl EventResult {
+    pub fn is_handled(self) -> bool {
+        match self {
+            EventResult::Handled => true,
+            EventResult::Unhandled => false,
+        }
+    }
+}
+
 pub trait Application: 'static + Sized {
     type Event: 'static + Send;
     type Error: Error;
