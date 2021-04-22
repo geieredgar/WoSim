@@ -17,4 +17,5 @@ repos:
     hooks:
     -   id: cargo-check
     -   id: clippy
+        args: ['--workspace', '--', '-D', 'warnings']
     -   id: fmt

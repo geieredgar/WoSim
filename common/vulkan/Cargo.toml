@@ -1,0 +1,13 @@
+[package]
+name = "wosim-common-vulkan"
+version = "0.1.0"
+authors = ["Edgar Geier <egeier@rhrk.uni-kl.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+workspace = "../.."
+edition = "2018"
+
+[dependencies]
+ash = "0.32"
+bytemuck = "1.5.1"
+vk-mem = "0.2.2"

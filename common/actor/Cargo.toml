@@ -1,0 +1,13 @@
+[package]
+name = "wosim-common-actor"
+version = "0.1.0"
+authors = ["Edgar Geier <egeier@rhrk.uni-kl.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../../README.md"
+workspace = "../.."
+edition = "2018"
+
+[dependencies]
+futures = "0.3.14"
+log = "0.4.14"
+tokio = { version = "1.5.0", features = ["sync"] }
