@@ -1,21 +1,25 @@
 use std::{ffi::CString, sync::Arc, time::Instant};
 
-use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use ::vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
+use ::winit::{
+    event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
+    window::{Fullscreen, Window, WindowBuilder},
+};
+use actor::Address;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use error::Error;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
+use tokio::runtime::Runtime;
 use util::iterator::MaxOkFilterMap;
-use winit::{
-    event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::{Fullscreen, Window, WindowBuilder},
-};
+
+use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
+use crate::winit::run;
 
 mod context;
 mod cull;
@@ -29,6 +33,7 @@ mod scene;
 mod shaders;
 mod view;
 mod vulkan;
+mod winit;
 
 struct Application {
     renderer: Renderer,
@@ -44,8 +49,11 @@ struct Application {
     time: f32,
 }
 
-impl Application {
-    fn new(event_loop: &EventLoop<()>) -> Result<Self, Error> {
+impl winit::Application for Application {
+    type Event = ();
+    type Error = Error;
+
+    fn new(event_loop: &EventLoop<()>, _address: Address<()>) -> Result<Self, Error> {
         let window = WindowBuilder::new()
             .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
@@ -92,7 +100,11 @@ impl Application {
         })
     }
 
-    fn process_event(&mut self, event: Event<()>) -> Result<ControlFlow, Error> {
+    fn handle(
+        &mut self,
+        event: Event<()>,
+        _target: &EventLoopWindowTarget<()>,
+    ) -> Result<ControlFlow, Error> {
         self.context.egui.handle_event(&event);
         match event {
             Event::WindowEvent { event, .. } => match event {
@@ -210,7 +222,9 @@ impl Application {
         }
         Ok(ControlFlow::Poll)
     }
+}
 
+impl Application {
     fn recreate_renderer(&mut self) -> Result<(), Error> {
         self.device.wait_idle()?;
         self.swapchain = Arc::new(create_swapchain(
@@ -316,15 +330,6 @@ fn create_swapchain(
 }
 
 fn main() -> Result<(), Error> {
-    let event_loop = EventLoop::new();
-    let mut application = Application::new(&event_loop)?;
-    event_loop.run(
-        move |event, _, control_flow| match application.process_event(event) {
-            Ok(flow) => *control_flow = flow,
-            Err(error) => {
-                println!("Error: {:?}", error);
-                *control_flow = ControlFlow::Exit;
-            }
-        },
-    );
+    env_logger::init();
+    run::<Application>(Runtime::new()?);
 }

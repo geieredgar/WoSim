@@ -8,10 +8,14 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+actor = { path = "../common/actor", package = "wosim-common-actor" }
 ash-window = "0.6"
 copypasta = "0.7.1"
 egui = "0.11.0"
+env_logger = "0.8.3"
+log = "0.4.14"
 nalgebra = "0.26.1"
+tokio = { version = "1.5.0", features = ["rt", "rt-multi-thread", "time"] }
 server = { path = "../server", package = "wosim-server" }
 util = { path = "../common/util", package = "wosim-common-util" }
 vulkan = { path = "../common/vulkan", package = "wosim-common-vulkan" }
