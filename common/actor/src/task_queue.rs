@@ -100,9 +100,9 @@ impl<T: Future<Output = ()>> TaskBlock<T> {
             let waker = Waker::from_raw(self.wakers[index].raw_waker());
             let mut context = Context::from_waker(&waker);
             match task.poll(&mut context) {
-                Poll::Ready(output) => {
+                Poll::Ready(()) => {
                     ptr::drop_in_place(self.tasks[index].as_mut_ptr());
-                    Poll::Ready(output)
+                    Poll::Ready(())
                 }
                 Poll::Pending => {
                     self.pending ^= 1 << (63 - index);
