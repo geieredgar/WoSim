@@ -1,4 +1,4 @@
-use std::{ffi::CString, sync::Arc, time::Instant};
+use std::{ffi::CString, fmt::Debug, fs::read, future::Future, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::run;
@@ -15,10 +15,14 @@ use actor::Address;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use error::Error;
+use log::error;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
-use tokio::runtime::Runtime;
+use server::{
+    Certificate, ClientMessage, ResolveError, Resolver, ServerAddress, ServerMessage, Token,
+};
+use tokio::{runtime::Runtime, spawn};
 use util::iterator::MaxOkFilterMap;
 
 mod context;
@@ -38,6 +42,7 @@ mod winit;
 pub use crate::winit::EventResult;
 
 struct Application {
+    address: Address<ApplicationMessage>,
     renderer: Renderer,
     swapchain: Arc<Swapchain>,
     context: Context,
@@ -49,13 +54,25 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
+    server: Option<Address<ServerMessage>>,
+    resolver: Arc<Resolver>,
+    user_name: String,
+    server_addr: String,
+}
+
+enum ApplicationMessage {
+    Client(ClientMessage),
+    Connect(Address<ServerMessage>),
 }
 
 impl winit::Application for Application {
-    type Event = ();
+    type Message = ApplicationMessage;
     type Error = Error;
 
-    fn new(event_loop: &EventLoop<()>, _address: Address<()>) -> Result<Self, Error> {
+    fn new(
+        event_loop: &EventLoop<ApplicationMessage>,
+        address: Address<ApplicationMessage>,
+    ) -> Result<Self, Error> {
         let window = WindowBuilder::new()
             .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
@@ -82,7 +99,9 @@ impl winit::Application for Application {
         let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
+        let cert = Certificate::from_pem(&read("cert.pem")?).unwrap();
         Ok(Self {
+            address,
             renderer,
             swapchain,
             context,
@@ -99,13 +118,17 @@ impl winit::Application for Application {
             vsync: true,
             last_update: Instant::now(),
             time: 0.0,
+            server: None,
+            resolver: Arc::new(Resolver::new(vec![cert])),
+            server_addr: "127.0.0.1:8888".to_owned(),
+            user_name: "User".to_owned(),
         })
     }
 
-    fn handle(
+    fn handle_event(
         &mut self,
         event: Event<()>,
-        _target: &EventLoopWindowTarget<()>,
+        _target: &EventLoopWindowTarget<ApplicationMessage>,
     ) -> Result<ControlFlow, Error> {
         if self.handle_early_mouse_grab(&event).is_handled() {
             return Ok(ControlFlow::Poll);
@@ -199,6 +222,30 @@ impl winit::Application for Application {
                 self.context.debug.begin_frame();
                 let ctx = self.context.egui.begin();
                 self.context.debug.render(&ctx);
+                ::egui::Window::new("Server connection").show(&ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            ::egui::TextEdit::singleline(&mut self.server_addr)
+                                .enabled(self.server.is_none()),
+                        );
+                        ui.add(
+                            ::egui::TextEdit::singleline(&mut self.user_name)
+                                .enabled(self.server.is_none()),
+                        );
+                        if self.server.is_none() {
+                            if ui.button("Connect").clicked() {
+                                spawn(report(connect_to_server(
+                                    self.address.clone(),
+                                    self.resolver.clone(),
+                                    self.server_addr.clone(),
+                                    self.user_name.clone(),
+                                )));
+                            }
+                        } else if ui.button("Disconnect").clicked() {
+                            self.server = None;
+                        }
+                    });
+                });
                 self.context
                     .egui
                     .end(if self.grab { None } else { Some(&self.window) })?;
@@ -227,6 +274,40 @@ impl winit::Application for Application {
             _ => {}
         }
         Ok(ControlFlow::Poll)
+    }
+
+    fn handle_message(
+        &mut self,
+        message: ApplicationMessage,
+        _target: &EventLoopWindowTarget<ApplicationMessage>,
+    ) -> Result<ControlFlow, Error> {
+        match message {
+            ApplicationMessage::Client(_) => {}
+            ApplicationMessage::Connect(server) => {
+                self.server = Some(server);
+            }
+        };
+        Ok(ControlFlow::Poll)
+    }
+}
+
+async fn connect_to_server(
+    application: Address<ApplicationMessage>,
+    resolver: Arc<Resolver>,
+    server: String,
+    name: String,
+) -> Result<(), ResolveError> {
+    let client = application.clone().map(ApplicationMessage::Client);
+    let (_, server) = resolver
+        .resolve(|_| client, ServerAddress::Remote(server), Token { name })
+        .await?;
+    application.send(ApplicationMessage::Connect(server));
+    Ok(())
+}
+
+async fn report<E: Debug>(f: impl Future<Output = Result<(), E>>) {
+    if let Err(error) = f.await {
+        error!("Task failed: {:?}", error);
     }
 }
 

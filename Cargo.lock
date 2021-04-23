@@ -322,6 +322,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctrlc"
+version = "3.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "232295399409a8b7ae41276757b5a1cc21032848d42bff2352261f958b3ca29a"
+dependencies = [
+ "nix 0.20.0",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "darling"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1413,6 +1423,20 @@ name = "serde"
 version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "558dc50e1a5a5fa7112ca2ce4effcb321b0300c0d4ccf0776a9f60cd89031171"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.125"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b093b7a2bb58203b5da3056c05b4ec1fed827dcfdb37347a8841695263b3d06d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "shaderc"
@@ -1987,6 +2011,15 @@ dependencies = [
 name = "wosim-server"
 version = "0.1.0"
 dependencies = [
+ "ctrlc",
+ "env_logger",
+ "log",
+ "quinn",
+ "serde",
+ "tokio",
+ "webpki",
+ "wosim-common-actor",
+ "wosim-common-net",
  "wosim-common-util",
  "wosim-common-vulkan",
 ]
