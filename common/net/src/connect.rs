@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use actor::Address;
+use actor::{forward, mailbox, Address};
 use bytes::Bytes;
 use futures::StreamExt;
 use log::warn;
@@ -17,25 +17,35 @@ use crate::{
     Authenticator, EstablishConnectionError, Message, SessionMessage, Writer,
 };
 
-pub fn local_connect<M, A: Authenticator>(
+pub fn local_connect<M, A: Authenticator, F: FnOnce(Address<M>) -> Address<A::ClientMessage>>(
     server: Address<SessionMessage<A::Identity, M>>,
     authenticator: &A,
-    client: Address<A::ClientMessage>,
+    factory: F,
     token: A::Token,
-) -> Result<Address<M>, EstablishConnectionError> {
-    match authenticator.authenticate(client, token) {
-        Ok(identity) => Ok(Address::new(Arc::new(LocalSender::new(server, identity)))),
-        Err(error) => Err(EstablishConnectionError::TokenRejected(error.to_string())),
-    }
+) -> Result<(Address<A::ClientMessage>, Address<M>), EstablishConnectionError> {
+    let (mailbox, client) = mailbox();
+    let identity = match authenticator.authenticate(client, token) {
+        Ok(identity) => identity,
+        Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
+    };
+    let server = Address::new(Arc::new(LocalSender::new(server, identity)));
+    let client = factory(server.clone());
+    spawn(forward(mailbox, client.clone()));
+    Ok((client, server))
 }
 
-pub async fn remote_connect<M: Message, N: Message, T: Serialize>(
+pub async fn remote_connect<
+    M: Message,
+    N: Message,
+    T: Serialize,
+    F: FnOnce(Address<N>) -> Address<M>,
+>(
     endpoint: &Endpoint,
     addr: &SocketAddr,
     server_name: &str,
-    receiver: Address<M>,
+    factory: F,
     token: &T,
-) -> Result<Address<N>, EstablishConnectionError> {
+) -> Result<(Address<M>, Address<N>), EstablishConnectionError> {
     let NewConnection {
         connection,
         bi_streams,
@@ -49,10 +59,12 @@ pub async fn remote_connect<M: Message, N: Message, T: Serialize>(
         .write(token)
         .map_err(EstablishConnectionError::Serialize)?;
     writer.send(send).await?;
-    spawn(self::bi_streams(bi_streams, receiver.clone()));
-    spawn(self::uni_streams(uni_streams, receiver.clone()));
-    spawn(self::datagrams(datagrams, receiver.clone()));
-    Ok(Address::new(Arc::new(RemoteSender(connection))))
+    let server = Address::new(Arc::new(RemoteSender(connection)));
+    let client = factory(server.clone());
+    spawn(self::bi_streams(bi_streams, client.clone()));
+    spawn(self::uni_streams(uni_streams, client.clone()));
+    spawn(self::datagrams(datagrams, client.clone()));
+    Ok((client, server))
 }
 
 async fn bi_streams<M: Message>(mut bi_streams: IncomingBiStreams, receiver: Address<M>) {
