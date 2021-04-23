@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+};
 
 use actor::{forward, mailbox, Address};
 use bytes::Bytes;
@@ -46,6 +50,11 @@ pub async fn remote_connect<
     factory: F,
     token: &T,
 ) -> Result<(Address<M>, Address<N>), EstablishConnectionError> {
+    let server_name = if IpAddr::from_str(server_name).is_err() {
+        server_name
+    } else {
+        "localhost"
+    };
     let NewConnection {
         connection,
         bi_streams,
