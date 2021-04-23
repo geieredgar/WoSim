@@ -2,13 +2,21 @@ use std::io::Cursor;
 
 use bincode::{deserialize_from, Error};
 use bytes::Bytes;
+use quinn::{ReadToEndError, RecvStream};
 use serde::de::DeserializeOwned;
 
 pub struct Reader(Cursor<Bytes>);
 
+impl From<Bytes> for Reader {
+    fn from(bytes: Bytes) -> Self {
+        Self(Cursor::new(bytes))
+    }
+}
+
 impl Reader {
-    pub fn new(inner: Bytes) -> Self {
-        Self(Cursor::new(inner))
+    pub async fn recv(recv: RecvStream, size_limit: usize) -> Result<Self, ReadToEndError> {
+        let bytes: Bytes = recv.read_to_end(size_limit).await?.into();
+        Ok(bytes.into())
     }
 
     pub fn read<T: DeserializeOwned>(&mut self) -> Result<T, Error> {

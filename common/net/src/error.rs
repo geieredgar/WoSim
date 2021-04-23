@@ -9,6 +9,7 @@ pub enum EstablishConnectionError {
     SendDatagram(SendDatagramError),
     Serialize(bincode::Error),
     TokenMissing,
+    InvalidToken,
     TokenRejected(String),
     Write(WriteError),
 }

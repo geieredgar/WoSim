@@ -1,4 +1,21 @@
-pub trait Authenticator: Send + Sync {
-    fn login(&self, token: Vec<u8>) -> Result<u64, String>;
-    fn logout(&self, id: u64);
+use std::error::Error;
+
+use actor::Address;
+use serde::{de::DeserializeOwned, Serialize};
+
+use crate::Message;
+
+pub trait Authenticator: Send + Sync + 'static {
+    type Token: Serialize + DeserializeOwned + Send;
+    type Identity: Clone + Send + Sync;
+    type Error: Error;
+    type ClientMessage: Message;
+
+    fn authenticate(
+        &self,
+        client: Address<Self::ClientMessage>,
+        token: Self::Token,
+    ) -> Result<Self::Identity, Self::Error>;
+
+    fn token_size_limit() -> usize;
 }
