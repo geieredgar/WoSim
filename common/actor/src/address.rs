@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::Sender;
+use crate::{MapSender, Sender};
 
 pub struct Address<M: 'static>(Arc<dyn Sender<M>>);
 
@@ -11,6 +11,13 @@ impl<M: 'static> Address<M> {
 
     pub fn send(&self, message: M) {
         self.0.send(message);
+    }
+
+    pub fn map<N: Send + Sync, F: Send + Sync + 'static + Fn(N) -> M>(
+        self,
+        transform: F,
+    ) -> Address<N> {
+        Address::new(Arc::new(MapSender::new(self, transform)))
     }
 }
 
