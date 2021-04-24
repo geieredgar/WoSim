@@ -28,18 +28,24 @@ impl EventResult {
 }
 
 pub trait Application: 'static + Sized {
-    type Event: 'static + Send;
+    type Message: 'static + Send;
     type Error: Error;
 
     fn new(
-        event_loop: &EventLoop<Self::Event>,
-        address: Address<Self::Event>,
+        event_loop: &EventLoop<Self::Message>,
+        address: Address<Self::Message>,
     ) -> Result<Self, Self::Error>;
 
-    fn handle(
+    fn handle_event(
         &mut self,
-        event: Event<'_, Self::Event>,
-        target: &EventLoopWindowTarget<Self::Event>,
+        event: Event<'_, ()>,
+        target: &EventLoopWindowTarget<Self::Message>,
+    ) -> Result<ControlFlow, Self::Error>;
+
+    fn handle_message(
+        &mut self,
+        message: Self::Message,
+        target: &EventLoopWindowTarget<Self::Message>,
     ) -> Result<ControlFlow, Self::Error>;
 }
 
@@ -58,15 +64,19 @@ pub fn run<T: Application>(runtime: Runtime) -> ! {
     };
     drop(guard);
     event_loop.run(move |event, target, control_flow| {
-        let guard = runtime.enter();
-        match application.handle(event, target) {
+        let _guard = runtime.enter();
+        let result = match event.map_nonuser_event::<()>() {
+            Ok(event) => application.handle_event(event, target),
+            Err(Event::UserEvent(message)) => application.handle_message(message, target),
+            Err(_) => panic!("Unexpected error"),
+        };
+        match result {
             Ok(flow) => *control_flow = flow,
             Err(error) => {
                 log::error!("Exiting loop because of error: {}", error);
                 *control_flow = ControlFlow::Exit;
             }
         };
-        drop(guard)
     })
 }
 
