@@ -1,6 +1,6 @@
 use actor::{Address, Sender};
 use log::warn;
-use quinn::Connection;
+use quinn::{Connection, VarInt};
 use tokio::spawn;
 
 use crate::{Message, SessionMessage};
@@ -15,6 +15,12 @@ impl<T: Message> Sender<T> for RemoteSender {
                 warn!("Sending message failed: {}", error)
             };
         });
+    }
+}
+
+impl Drop for RemoteSender {
+    fn drop(&mut self) {
+        self.0.close(VarInt::from_u32(0), &[]);
     }
 }
 
