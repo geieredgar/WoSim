@@ -22,6 +22,7 @@ pub use server::*;
 pub(self) use state::State;
 pub use token::*;
 
+pub use net::SessionMessage;
 pub use quinn::Certificate;
 
 pub const PROTOCOLS: &[&[u8]] = &[b"wosim/0.1"];

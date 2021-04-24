@@ -7,6 +7,7 @@ mod listen;
 mod message;
 mod reader;
 mod sender;
+mod session;
 mod writer;
 
 pub use address::*;
@@ -18,4 +19,5 @@ pub use listen::listen;
 pub use message::*;
 pub use reader::*;
 use sender::*;
+use session::*;
 pub use writer::*;

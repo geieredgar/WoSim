@@ -5,29 +5,33 @@ use std::{
 };
 
 use actor::{forward, mailbox, Address};
-use bytes::Bytes;
-use futures::StreamExt;
-use log::warn;
-use quinn::{
-    Datagrams, Endpoint, IncomingBiStreams, IncomingUniStreams, NewConnection, RecvStream,
-    SendStream,
-};
+use quinn::{Endpoint, NewConnection};
 use serde::Serialize;
 use tokio::spawn;
 
 use crate::{
-    from_bi_stream, from_datagram, from_uni_stream,
     sender::{LocalSender, RemoteSender},
-    Authenticator, EstablishConnectionError, Message, SessionMessage, Writer,
+    session, Authenticator, EstablishConnectionError, Message, SessionMessage, Writer,
 };
 
-pub fn local_connect<M, A: Authenticator, F: FnOnce(Address<M>) -> Address<A::ClientMessage>>(
+type ConnectResult<T> = Result<T, EstablishConnectionError>;
+
+type LocalConnectResult<I, M, N> = ConnectResult<(Address<SessionMessage<I, M>>, Address<N>)>;
+
+pub fn local_connect<
+    M,
+    A: Authenticator,
+    I: Clone + Send + Sync + 'static,
+    F: FnOnce(Address<M>) -> Address<SessionMessage<I, A::ClientMessage>>,
+>(
     server: Address<SessionMessage<A::Identity, M>>,
     authenticator: &A,
     factory: F,
+    identity: I,
     token: A::Token,
-) -> Result<(Address<A::ClientMessage>, Address<M>), EstablishConnectionError> {
+) -> LocalConnectResult<I, A::ClientMessage, M> {
     let (mailbox, client) = mailbox();
+    let client = Address::new(Arc::new(LocalSender::new(client, identity)));
     let identity = match authenticator.authenticate(client, token) {
         Ok(identity) => identity,
         Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
@@ -42,14 +46,16 @@ pub async fn remote_connect<
     M: Message,
     N: Message,
     T: Serialize,
-    F: FnOnce(Address<N>) -> Address<M>,
+    I: Clone + 'static + Send + Sync,
+    F: FnOnce(Address<N>) -> Address<SessionMessage<I, M>>,
 >(
     endpoint: &Endpoint,
     addr: &SocketAddr,
     server_name: &str,
     factory: F,
+    identity: I,
     token: &T,
-) -> Result<(Address<M>, Address<N>), EstablishConnectionError> {
+) -> ConnectResult<(Address<SessionMessage<I, M>>, Address<N>)> {
     let server_name = if IpAddr::from_str(server_name).is_err() {
         server_name
     } else {
@@ -70,59 +76,12 @@ pub async fn remote_connect<
     writer.send(send).await?;
     let server = Address::new(Arc::new(RemoteSender(connection)));
     let client = factory(server.clone());
-    spawn(self::bi_streams(bi_streams, client.clone()));
-    spawn(self::uni_streams(uni_streams, client.clone()));
-    spawn(self::datagrams(datagrams, client.clone()));
+    spawn(session(
+        bi_streams,
+        uni_streams,
+        datagrams,
+        client.clone(),
+        identity,
+    ));
     Ok((client, server))
-}
-
-async fn bi_streams<M: Message>(mut bi_streams: IncomingBiStreams, receiver: Address<M>) {
-    while let Some(Ok((send, recv))) = bi_streams.next().await {
-        spawn(bi_stream(send, recv, receiver.clone()));
-    }
-}
-
-async fn uni_streams<M: Message>(mut uni_streams: IncomingUniStreams, receiver: Address<M>) {
-    while let Some(Ok(recv)) = uni_streams.next().await {
-        spawn(uni_stream(recv, receiver.clone()));
-    }
-}
-
-async fn datagrams<M: Message>(mut datagrams: Datagrams, receiver: Address<M>) {
-    while let Some(Ok(datagram)) = datagrams.next().await {
-        spawn(self::datagram(datagram, receiver.clone()));
-    }
-}
-
-async fn bi_stream<M: Message>(send: SendStream, recv: RecvStream, receiver: Address<M>) {
-    let message = match from_bi_stream(recv, send).await {
-        Ok(message) => message,
-        Err(error) => {
-            warn!("Reading bidirectional stream failed: {}", error);
-            return;
-        }
-    };
-    receiver.send(message)
-}
-
-async fn uni_stream<M: Message>(recv: RecvStream, receiver: Address<M>) {
-    let message = match from_uni_stream(recv).await {
-        Ok(message) => message,
-        Err(error) => {
-            warn!("Reading unidirectional stream failed: {}", error);
-            return;
-        }
-    };
-    receiver.send(message)
-}
-
-async fn datagram<M: Message>(datagram: Bytes, receiver: Address<M>) {
-    let message = match from_datagram(datagram) {
-        Ok(message) => message,
-        Err(error) => {
-            warn!("Reading datagram failed: {}", error);
-            return;
-        }
-    };
-    receiver.send(message);
 }

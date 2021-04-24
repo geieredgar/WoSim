@@ -16,11 +16,13 @@ use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use error::Error;
 use log::error;
+use log::info;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
 use server::{
-    Certificate, ClientMessage, ResolveError, Resolver, ServerAddress, ServerMessage, Token,
+    Certificate, ClientMessage, ResolveError, Resolver, ServerAddress, ServerMessage,
+    SessionMessage, Token,
 };
 use tokio::{runtime::Runtime, spawn};
 use util::iterator::MaxOkFilterMap;
@@ -61,7 +63,7 @@ struct Application {
 }
 
 enum ApplicationMessage {
-    Client(ClientMessage),
+    Client(SessionMessage<(), ClientMessage>),
     Connect(Address<ServerMessage>),
 }
 
@@ -282,7 +284,16 @@ impl winit::Application for Application {
         _target: &EventLoopWindowTarget<ApplicationMessage>,
     ) -> Result<ControlFlow, Error> {
         match message {
-            ApplicationMessage::Client(_) => {}
+            ApplicationMessage::Client(message) => match message {
+                SessionMessage::Connect(_) => {
+                    info!("Connected to server");
+                }
+                SessionMessage::Message(_, _) => {}
+                SessionMessage::Disconnect(_) => {
+                    info!("Disconnected from server");
+                    self.server = None;
+                }
+            },
             ApplicationMessage::Connect(server) => {
                 self.server = Some(server);
             }
