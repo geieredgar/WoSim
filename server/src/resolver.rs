@@ -42,8 +42,8 @@ impl Resolver {
                 let (endpoint, _) = endpoint
                     .bind(&"[::]:0".parse().unwrap())
                     .map_err(ResolveError::Bind)?;
-                let hostname = match address.split_once(":") {
-                    Some((host, _)) => host,
+                let hostname = match address.split(':').next() {
+                    Some(host) => host,
                     None => &address,
                 };
                 let address = address
