@@ -1,4 +1,6 @@
-use std::{ffi::CString, fmt::Debug, fs::read, future::Future, sync::Arc, time::Instant};
+use std::{
+    ffi::CString, fmt::Debug, fs::read, fs::read_dir, future::Future, sync::Arc, time::Instant,
+};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::run;
@@ -101,7 +103,10 @@ impl winit::Application for Application {
         let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
-        let cert = Certificate::from_pem(&read("cert.pem")?).unwrap();
+        let certificates = read_dir("ca")?
+            .filter_map(|entry| entry.ok().map(|entry| read(entry.path()).ok()).flatten())
+            .filter_map(|pem| Certificate::from_pem(&pem).ok())
+            .collect();
         Ok(Self {
             address,
             renderer,
@@ -121,7 +126,7 @@ impl winit::Application for Application {
             last_update: Instant::now(),
             time: 0.0,
             server: None,
-            resolver: Arc::new(Resolver::new(vec![cert])),
+            resolver: Arc::new(Resolver::new(certificates)),
             server_addr: "127.0.0.1:8888".to_owned(),
             user_name: "User".to_owned(),
         })
