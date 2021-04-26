@@ -43,3 +43,29 @@ impl<M: 'static, N: Send + Sync + 'static, F: Send + Sync + 'static + Fn(N) -> M
         self.address.send((self.transform)(message))
     }
 }
+
+pub(super) struct FilterMapSender<M: 'static, N, F: Fn(N) -> Option<M>> {
+    address: Address<M>,
+    transform: F,
+    _phantom: PhantomData<N>,
+}
+
+impl<M: 'static, N, F: Fn(N) -> Option<M>> FilterMapSender<M, N, F> {
+    pub(super) fn new(address: Address<M>, transform: F) -> Self {
+        Self {
+            address,
+            transform,
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<M: 'static, N: Send + Sync + 'static, F: Send + Sync + 'static + Fn(N) -> Option<M>> Sender<N>
+    for FilterMapSender<M, N, F>
+{
+    fn send(&self, message: N) {
+        if let Some(message) = (self.transform)(message) {
+            self.address.send(message)
+        }
+    }
+}
