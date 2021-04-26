@@ -9,8 +9,9 @@ use egui::{
         plot::{Curve, Plot, Value},
         Slider,
     },
-    Color32, CtxRef, Window,
+    Align, Color32, CtxRef, DragValue, RadioButton, ScrollArea, Window,
 };
+use log::{set_max_level, Level, LevelFilter};
 
 use crate::{renderer::RenderTimestamps, ApplicationMessage};
 
@@ -28,6 +29,10 @@ pub struct DebugContext {
     server_address: String,
     username: String,
     connected: bool,
+    log_records: VecDeque<(Level, String, String)>,
+    log_scroll_to_bottom: bool,
+    log_limit_entries: bool,
+    log_entry_limit: usize,
 }
 
 #[derive(Default)]
@@ -35,6 +40,7 @@ pub struct DebugWindows {
     pub frame_times: bool,
     pub configuration: bool,
     pub information: bool,
+    pub log: bool,
 }
 
 impl DebugContext {
@@ -53,11 +59,22 @@ impl DebugContext {
             server_address: "localhost".to_owned(),
             username: "anonymous".to_owned(),
             connected: false,
+            log_records: VecDeque::new(),
+            log_scroll_to_bottom: true,
+            log_limit_entries: false,
+            log_entry_limit: 20,
         }
     }
 
     pub fn begin_frame(&mut self) {
         self.frame_start = Instant::now();
+    }
+
+    pub fn log(&mut self, level: Level, target: String, args: String) {
+        self.log_records.push_back((level, target, args));
+        if self.log_limit_entries && self.log_entry_limit < self.log_records.len() {
+            self.log_records.pop_front();
+        }
     }
 
     pub fn end_frame(&mut self, last_timestamps: Option<RenderTimestamps>) {
@@ -164,9 +181,101 @@ impl DebugContext {
         });
     }
 
+    fn level_color(level: Level) -> Color32 {
+        match level {
+            Level::Error => Color32::RED,
+            Level::Warn => Color32::YELLOW,
+            Level::Info => Color32::GREEN,
+            Level::Debug => Color32::BLUE,
+            Level::Trace => Color32::GRAY,
+        }
+    }
+
+    fn level_text(level: Level) -> &'static str {
+        match level {
+            Level::Error => "ERROR",
+            Level::Warn => "WARN",
+            Level::Info => "INFO",
+            Level::Debug => "DEBUG",
+            Level::Trace => "TRACE",
+        }
+    }
+
+    fn render_log(&mut self, ctx: &CtxRef, open: &mut bool) {
+        Window::new("Log").open(open).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let level = log::max_level();
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Off, "Off"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Off);
+                }
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Error, "Error"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Error);
+                }
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Warn, "Warn"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Warn);
+                }
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Info, "Info"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Info);
+                }
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Debug, "Debug"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Debug);
+                }
+                if ui
+                    .add(RadioButton::new(level == LevelFilter::Trace, "Trace"))
+                    .clicked()
+                {
+                    set_max_level(LevelFilter::Trace);
+                }
+                ui.checkbox(&mut self.log_scroll_to_bottom, "Scroll to bottom");
+                ui.checkbox(&mut self.log_limit_entries, "Limit log entries");
+                if self.log_limit_entries {
+                    ui.add(
+                        DragValue::new(&mut self.log_entry_limit)
+                            .speed(1)
+                            .prefix("Entry limit: "),
+                    );
+                    while self.log_records.len() > self.log_entry_limit {
+                        self.log_records.pop_front();
+                    }
+                }
+                if ui.button("Clear log").clicked() {
+                    self.log_records.clear();
+                }
+            });
+            ScrollArea::from_max_height(600.0).show(ui, |ui| {
+                for (level, target, args) in self.log_records.iter() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.colored_label(Self::level_color(*level), Self::level_text(*level));
+                        ui.label(target);
+                        ui.label(args);
+                    });
+                }
+                if self.log_scroll_to_bottom {
+                    ui.scroll_to_cursor(Align::BOTTOM);
+                }
+            });
+        });
+    }
+
     pub fn render(&mut self, ctx: &CtxRef, windows: &mut DebugWindows) {
         self.render_configuration(ctx, &mut windows.configuration);
         self.render_information(ctx, &mut windows.information);
         self.render_frame_times(ctx, &mut windows.frame_times);
+        self.render_log(ctx, &mut windows.log);
     }
 }

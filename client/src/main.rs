@@ -18,8 +18,8 @@ use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
 use error::Error;
-use log::error;
-use log::info;
+use log::{error, LevelFilter, Log};
+use log::{info, Level};
 use nalgebra::{RealField, Translation3, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
@@ -69,6 +69,31 @@ pub enum ApplicationMessage {
     Connected(Address<ServerMessage>),
     Connect { address: String, username: String },
     Disconnect,
+    Log(Level, String, String),
+}
+
+struct ApplicationLogger {
+    address: Address<ApplicationMessage>,
+    secondary: env_logger::Logger,
+}
+
+impl Log for ApplicationLogger {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        self.address.send(ApplicationMessage::Log(
+            record.level(),
+            record.target().to_owned(),
+            format!("{}", record.args()),
+        ));
+        self.secondary.log(record);
+    }
+
+    fn flush(&self) {
+        self.secondary.flush();
+    }
 }
 
 impl winit::Application for Application {
@@ -79,6 +104,12 @@ impl winit::Application for Application {
         event_loop: &EventLoop<ApplicationMessage>,
         address: Address<ApplicationMessage>,
     ) -> Result<Self, Error> {
+        log::set_boxed_logger(Box::new(ApplicationLogger {
+            address: address.clone(),
+            secondary: env_logger::builder().build(),
+        }))
+        .unwrap();
+        log::set_max_level(LevelFilter::Warn);
         let window = WindowBuilder::new()
             .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
@@ -188,6 +219,11 @@ impl winit::Application for Application {
                             VirtualKeyCode::F3 => {
                                 if input.state == ElementState::Pressed {
                                     self.windows.frame_times = !self.windows.frame_times;
+                                }
+                            }
+                            VirtualKeyCode::F4 => {
+                                if input.state == ElementState::Pressed {
+                                    self.windows.log = !self.windows.log;
                                 }
                             }
                             VirtualKeyCode::F9 => {
@@ -306,6 +342,9 @@ impl winit::Application for Application {
             }
             ApplicationMessage::Disconnect => {
                 self.server = None;
+            }
+            ApplicationMessage::Log(level, target, args) => {
+                self.context.debug.log(level, target, args);
             }
         };
         Ok(ControlFlow::Poll)
@@ -439,6 +478,5 @@ fn create_swapchain(
 }
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
     run::<Application>(Runtime::new()?);
 }
