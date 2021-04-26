@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 use crate::{FilterMapSender, MapSender, Sender};
 
@@ -25,6 +25,12 @@ impl<M: 'static> Address<M> {
         transform: F,
     ) -> Address<N> {
         Address::new(Arc::new(FilterMapSender::new(self, transform)))
+    }
+}
+
+impl<M: 'static> Debug for Address<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:p}", self.0)
     }
 }
 
