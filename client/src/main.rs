@@ -59,7 +59,7 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    server: Option<Address<ServerMessage>>,
+    _server: Option<Address<ServerMessage>>,
     resolver: Arc<Resolver>,
     windows: DebugWindows,
 }
@@ -163,7 +163,7 @@ impl winit::Application for Application {
             vsync: true,
             last_update: Instant::now(),
             time: 0.0,
-            server: None,
+            _server: None,
             resolver: Arc::new(Resolver::new(certificates)),
             windows: DebugWindows::default(),
         })
@@ -324,24 +324,24 @@ impl winit::Application for Application {
                 SessionMessage::Message(_, _) => {}
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
-                    self.server = None;
+                    self._server = None;
                     self.context.debug.connection_status_changed(false);
                 }
             },
             ApplicationMessage::Connected(server) => {
-                self.server = Some(server);
+                self._server = Some(server);
                 self.context.debug.connection_status_changed(true);
             }
             ApplicationMessage::Connect { address, username } => {
                 spawn(report(connect_to_server(
                     self.address.clone(),
                     self.resolver.clone(),
-                    address.clone(),
-                    username.clone(),
+                    address,
+                    username,
                 )));
             }
             ApplicationMessage::Disconnect => {
-                self.server = None;
+                self._server = None;
             }
             ApplicationMessage::Log(level, target, args) => {
                 self.context.debug.log(level, target, args);

@@ -56,14 +56,8 @@ impl Resolver {
                     .bind(&"[::]:0".parse().unwrap())
                     .map_err(ResolveError::Bind)?;
                 let mut split = address.splitn(2, ':');
-                let hostname = match split.next() {
-                    Some(host) => host,
-                    None => &address,
-                };
-                let port = match split.next() {
-                    Some(port) => port,
-                    None => "8888",
-                };
+                let hostname = split.next().unwrap_or(&address);
+                let port = split.next().unwrap_or("8888");
                 let address = format!("{}:{}", hostname, port);
                 let address = address
                     .to_socket_addrs()
