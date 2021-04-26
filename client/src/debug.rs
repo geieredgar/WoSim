@@ -3,6 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use actor::Address;
 use egui::{
     widgets::{
         plot::{Curve, Plot, Value},
@@ -11,9 +12,10 @@ use egui::{
     Color32, CtxRef, Window,
 };
 
-use crate::renderer::RenderTimestamps;
+use crate::{renderer::RenderTimestamps, ApplicationMessage};
 
 pub struct DebugContext {
+    address: Address<ApplicationMessage>,
     frame_count: usize,
     frames_per_second: usize,
     last_frame_count: usize,
@@ -23,13 +25,22 @@ pub struct DebugContext {
     frame_times_secs: f64,
     show_cpu_time: bool,
     show_gpu_time: bool,
-    pub enabled: bool,
-    pub rotate_cubes: bool,
+    server_address: String,
+    username: String,
+    connected: bool,
+}
+
+#[derive(Default)]
+pub struct DebugWindows {
+    pub frame_times: bool,
+    pub configuration: bool,
+    pub information: bool,
 }
 
 impl DebugContext {
-    pub fn new() -> Self {
+    pub fn new(address: Address<ApplicationMessage>) -> Self {
         Self {
+            address,
             frame_count: 0,
             frames_per_second: 0,
             last_frame_count: 0,
@@ -39,8 +50,9 @@ impl DebugContext {
             frame_times_secs: 10.0,
             show_cpu_time: true,
             show_gpu_time: true,
-            enabled: false,
-            rotate_cubes: false,
+            server_address: "localhost".to_owned(),
+            username: "anonymous".to_owned(),
+            connected: false,
         }
     }
 
@@ -69,16 +81,40 @@ impl DebugContext {
         }
     }
 
-    pub fn render(&mut self, ctx: &CtxRef) {
-        if !self.enabled {
-            return;
-        }
-        Window::new("Debug info").show(ctx, |ui| {
-            ui.checkbox(&mut self.rotate_cubes, "Rotate cubes");
+    pub fn connection_status_changed(&mut self, connected: bool) {
+        self.connected = connected;
+    }
+
+    fn render_configuration(&mut self, ctx: &CtxRef, open: &mut bool) {
+        Window::new("Configuration").open(open).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.add(::egui::TextEdit::singleline(&mut self.server_address));
+                ui.add(::egui::TextEdit::singleline(&mut self.username));
+                if !self.connected {
+                    if ui.button("Connect").clicked() {
+                        self.address.send(ApplicationMessage::Connect {
+                            address: self.server_address.clone(),
+                            username: self.username.clone(),
+                        });
+                    }
+                } else if ui.button("Disconnect").clicked() {
+                    self.address.send(ApplicationMessage::Disconnect);
+                }
+            });
+        });
+    }
+
+    fn render_information(&mut self, ctx: &CtxRef, open: &mut bool) {
+        Window::new("Information").open(open).show(ctx, |ui| {
             ui.label(format!(
                 "FPS: {} Frame Count: {}",
                 self.frames_per_second, self.frame_count
             ));
+        });
+    }
+
+    fn render_frame_times(&mut self, ctx: &CtxRef, open: &mut bool) {
+        Window::new("Frame times").open(open).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Frame time storage duration [s]");
                 ui.add(Slider::new(&mut self.frame_times_secs, 0.0f64..=120.0f64));
@@ -126,5 +162,11 @@ impl DebugContext {
                 ui.add(plot);
             }
         });
+    }
+
+    pub fn render(&mut self, ctx: &CtxRef, windows: &mut DebugWindows) {
+        self.render_configuration(ctx, &mut windows.configuration);
+        self.render_information(ctx, &mut windows.information);
+        self.render_frame_times(ctx, &mut windows.frame_times);
     }
 }

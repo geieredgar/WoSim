@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use actor::Address;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 
 use vulkan::{Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE};
@@ -12,6 +13,7 @@ use crate::{
     error::Error,
     renderer::RenderConfiguration,
     scene::{Camera, MeshData, Model, Object, SceneContext, Sphere, Transform, Vertex},
+    ApplicationMessage,
 };
 
 pub struct Context {
@@ -26,6 +28,7 @@ pub struct Context {
 
 impl Context {
     pub fn new(
+        address: Address<ApplicationMessage>,
         device: &Arc<Device>,
         configuration: RenderConfiguration,
         scale_factor: f32,
@@ -43,7 +46,7 @@ impl Context {
         };
         let mut scene = SceneContext::new(device, 128, 128, 128, camera)?;
         let egui = EguiContext::new(device, scale_factor)?;
-        let debug = DebugContext::new();
+        let debug = DebugContext::new(address);
         let cube = MeshData {
             vertices: vec![
                 Vertex {
