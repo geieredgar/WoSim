@@ -11,7 +11,7 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
-use util::shader::align_bytes;
+use util::{handle::HandleFlow, handle::HandleFlowExt, shader::align_bytes};
 use vulkan::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
     DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags, PushConstantRange,
@@ -22,7 +22,7 @@ use vulkan::{
 use crate::{
     error::Error,
     shaders::{EGUI_FRAG, EGUI_VERT},
-    EventResult,
+    ApplicationMessage,
 };
 
 use super::Font;
@@ -112,8 +112,8 @@ impl EguiContext {
         })
     }
 
-    pub fn handle_event(&mut self, event: &winit::event::Event<()>) -> EventResult {
-        if let winit::event::Event::WindowEvent { event, .. } = event {
+    pub fn handle_event(&mut self, message: &ApplicationMessage) -> HandleFlow {
+        if let ApplicationMessage::WindowEvent(event) = message {
             match event {
                 WindowEvent::Resized(size) => {
                     let pixels_per_point = self
@@ -131,7 +131,7 @@ impl EguiContext {
                 WindowEvent::ReceivedCharacter(c) => {
                     if self.inner.wants_keyboard_input() && !c.is_ascii_control() {
                         self.input.events.push(Event::Text(c.to_string()));
-                        return EventResult::Handled;
+                        HandleFlow::handled()?;
                     }
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
@@ -143,7 +143,7 @@ impl EguiContext {
                                     pressed: input.state == ElementState::Pressed,
                                     modifiers: self.modifiers,
                                 });
-                                return EventResult::Handled;
+                                HandleFlow::handled()?;
                             }
                         }
                     }
@@ -186,27 +186,24 @@ impl EguiContext {
                             modifiers: self.modifiers,
                         });
                         if self.inner.wants_pointer_input() {
-                            return EventResult::Handled;
+                            return HandleFlow::handled();
                         }
                     }
-                }
-                WindowEvent::ScaleFactorChanged {
-                    scale_factor,
-                    new_inner_size,
-                } => {
-                    self.input.pixels_per_point = Some(*scale_factor as f32);
-                    self.input.screen_rect = Some(egui::Rect::from_min_size(
-                        Default::default(),
-                        Vec2 {
-                            x: new_inner_size.width as f32,
-                            y: new_inner_size.height as f32,
-                        } / self.scale_factor(),
-                    ));
                 }
                 _ => {}
             }
         }
-        EventResult::Unhandled
+        if let ApplicationMessage::ScaleFactorChanged(scale_factor, new_inner_size) = message {
+            self.input.pixels_per_point = Some(*scale_factor as f32);
+            self.input.screen_rect = Some(egui::Rect::from_min_size(
+                Default::default(),
+                Vec2 {
+                    x: new_inner_size.width as f32,
+                    y: new_inner_size.height as f32,
+                } / self.scale_factor(),
+            ));
+        }
+        HandleFlow::unhandled()
     }
 
     pub fn begin(&mut self) -> CtxRef {
