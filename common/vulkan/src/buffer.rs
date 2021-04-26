@@ -113,6 +113,9 @@ impl<T: Copy> GpuVariable<T> {
     }
 }
 
+unsafe impl<T: Copy + Send + Sync> Sync for GpuVariable<T> {}
+unsafe impl<T: Copy + Send + Sync> Send for GpuVariable<T> {}
+
 pub struct GpuVec<T: Copy> {
     buffer: Buffer,
     len: usize,
@@ -211,3 +214,6 @@ impl<T: Copy> GpuVec<T> {
         self.len = 0;
     }
 }
+
+unsafe impl<T: Copy + Send + Sync> Sync for GpuVec<T> {}
+unsafe impl<T: Copy + Send + Sync> Send for GpuVec<T> {}
