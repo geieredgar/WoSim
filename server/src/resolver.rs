@@ -55,10 +55,10 @@ impl Resolver {
                 let (endpoint, _) = endpoint
                     .bind(&"[::]:0".parse().unwrap())
                     .map_err(ResolveError::Bind)?;
-                let hostname = match address.split(':').next() {
-                    Some(host) => host,
-                    None => &address,
-                };
+                let mut split = address.splitn(2, ':');
+                let hostname = split.next().unwrap_or(&address);
+                let port = split.next().unwrap_or("8888");
+                let address = format!("{}:{}", hostname, port);
                 let address = address
                     .to_socket_addrs()
                     .map_err(ResolveError::IpResolve)?

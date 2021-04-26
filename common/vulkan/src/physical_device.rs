@@ -4,7 +4,7 @@ use ash::{
     prelude::VkResult,
     version::{InstanceV1_0, InstanceV1_1},
     vk::{
-        self, ExtensionProperties, Format, FormatProperties, PhysicalDeviceFeatures2,
+        self, make_version, ExtensionProperties, Format, FormatProperties, PhysicalDeviceFeatures2,
         PhysicalDevicePortabilitySubsetFeaturesKHR, PhysicalDevicePortabilitySubsetPropertiesKHR,
         PhysicalDeviceProperties2, PhysicalDeviceType, PhysicalDeviceVulkan12Features,
         PresentModeKHR, QueueFamilyProperties, SurfaceCapabilitiesKHR, SurfaceFormatKHR,
@@ -87,6 +87,14 @@ impl PhysicalDevice {
 
     pub fn properties(&self) -> PhysicalDeviceProperties {
         let mut properties = PhysicalDeviceProperties::default();
+        properties.vulkan_10.properties = unsafe {
+            self.instance
+                .inner
+                .get_physical_device_properties(self.handle)
+        };
+        if properties.vulkan_10.properties.api_version < make_version(1, 2, 0) {
+            return properties;
+        }
         unsafe {
             self.instance
                 .inner

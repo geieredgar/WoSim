@@ -1,4 +1,6 @@
-use std::{ffi::CString, fmt::Debug, fs::read, future::Future, sync::Arc, time::Instant};
+use std::{
+    ffi::CString, fmt::Debug, fs::read, fs::read_dir, future::Future, sync::Arc, time::Instant,
+};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::run;
@@ -14,10 +16,11 @@ use ::winit::{
 use actor::Address;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
+use debug::DebugWindows;
 use error::Error;
-use log::error;
-use log::info;
-use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
+use log::{error, LevelFilter, Log};
+use log::{info, Level};
+use nalgebra::{RealField, Translation3, Vector3};
 use renderer::Renderer;
 use scene::ControlState;
 use server::{
@@ -56,15 +59,41 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    server: Option<Address<ServerMessage>>,
+    _server: Option<Address<ServerMessage>>,
     resolver: Arc<Resolver>,
-    user_name: String,
-    server_addr: String,
+    windows: DebugWindows,
 }
 
-enum ApplicationMessage {
+pub enum ApplicationMessage {
     Client(SessionMessage<(), ClientMessage>),
-    Connect(Address<ServerMessage>),
+    Connected(Address<ServerMessage>),
+    Connect { address: String, username: String },
+    Disconnect,
+    Log(Level, String, String),
+}
+
+struct ApplicationLogger {
+    address: Address<ApplicationMessage>,
+    secondary: env_logger::Logger,
+}
+
+impl Log for ApplicationLogger {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        self.address.send(ApplicationMessage::Log(
+            record.level(),
+            record.target().to_owned(),
+            format!("{}", record.args()),
+        ));
+        self.secondary.log(record);
+    }
+
+    fn flush(&self) {
+        self.secondary.flush();
+    }
 }
 
 impl winit::Application for Application {
@@ -75,6 +104,12 @@ impl winit::Application for Application {
         event_loop: &EventLoop<ApplicationMessage>,
         address: Address<ApplicationMessage>,
     ) -> Result<Self, Error> {
+        log::set_boxed_logger(Box::new(ApplicationLogger {
+            address: address.clone(),
+            secondary: env_logger::builder().build(),
+        }))
+        .unwrap();
+        log::set_max_level(LevelFilter::Warn);
         let window = WindowBuilder::new()
             .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
@@ -98,10 +133,18 @@ impl winit::Application for Application {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let device = Arc::new(device);
-        let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
+        let context = Context::new(
+            address.clone(),
+            &device,
+            render_configuration,
+            window.scale_factor() as f32,
+        )?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
-        let cert = Certificate::from_pem(&read("cert.pem")?).unwrap();
+        let certificates = read_dir("ca")?
+            .filter_map(|entry| entry.ok().map(|entry| read(entry.path()).ok()).flatten())
+            .filter_map(|pem| Certificate::from_pem(&pem).ok())
+            .collect();
         Ok(Self {
             address,
             renderer,
@@ -120,10 +163,9 @@ impl winit::Application for Application {
             vsync: true,
             last_update: Instant::now(),
             time: 0.0,
-            server: None,
-            resolver: Arc::new(Resolver::new(vec![cert])),
-            server_addr: "127.0.0.1:8888".to_owned(),
-            user_name: "User".to_owned(),
+            _server: None,
+            resolver: Arc::new(Resolver::new(certificates)),
+            windows: DebugWindows::default(),
         })
     }
 
@@ -166,7 +208,22 @@ impl winit::Application for Application {
                             }
                             VirtualKeyCode::F1 => {
                                 if input.state == ElementState::Pressed {
-                                    self.context.debug.enabled = !self.context.debug.enabled;
+                                    self.windows.configuration = !self.windows.configuration;
+                                }
+                            }
+                            VirtualKeyCode::F2 => {
+                                if input.state == ElementState::Pressed {
+                                    self.windows.information = !self.windows.information;
+                                }
+                            }
+                            VirtualKeyCode::F3 => {
+                                if input.state == ElementState::Pressed {
+                                    self.windows.frame_times = !self.windows.frame_times;
+                                }
+                            }
+                            VirtualKeyCode::F4 => {
+                                if input.state == ElementState::Pressed {
+                                    self.windows.log = !self.windows.log;
                                 }
                             }
                             VirtualKeyCode::F9 => {
@@ -223,31 +280,7 @@ impl winit::Application for Application {
                 self.update();
                 self.context.debug.begin_frame();
                 let ctx = self.context.egui.begin();
-                self.context.debug.render(&ctx);
-                ::egui::Window::new("Server connection").show(&ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            ::egui::TextEdit::singleline(&mut self.server_addr)
-                                .enabled(self.server.is_none()),
-                        );
-                        ui.add(
-                            ::egui::TextEdit::singleline(&mut self.user_name)
-                                .enabled(self.server.is_none()),
-                        );
-                        if self.server.is_none() {
-                            if ui.button("Connect").clicked() {
-                                spawn(report(connect_to_server(
-                                    self.address.clone(),
-                                    self.resolver.clone(),
-                                    self.server_addr.clone(),
-                                    self.user_name.clone(),
-                                )));
-                            }
-                        } else if ui.button("Disconnect").clicked() {
-                            self.server = None;
-                        }
-                    });
-                });
+                self.context.debug.render(&ctx, &mut self.windows);
                 self.context
                     .egui
                     .end(if self.grab { None } else { Some(&self.window) })?;
@@ -291,11 +324,27 @@ impl winit::Application for Application {
                 SessionMessage::Message(_, _) => {}
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
-                    self.server = None;
+                    self._server = None;
+                    self.context.debug.connection_status_changed(false);
                 }
             },
-            ApplicationMessage::Connect(server) => {
-                self.server = Some(server);
+            ApplicationMessage::Connected(server) => {
+                self._server = Some(server);
+                self.context.debug.connection_status_changed(true);
+            }
+            ApplicationMessage::Connect { address, username } => {
+                spawn(report(connect_to_server(
+                    self.address.clone(),
+                    self.resolver.clone(),
+                    address,
+                    username,
+                )));
+            }
+            ApplicationMessage::Disconnect => {
+                self._server = None;
+            }
+            ApplicationMessage::Log(level, target, args) => {
+                self.context.debug.log(level, target, args);
             }
         };
         Ok(ControlFlow::Poll)
@@ -305,14 +354,14 @@ impl winit::Application for Application {
 async fn connect_to_server(
     application: Address<ApplicationMessage>,
     resolver: Arc<Resolver>,
-    server: String,
+    address: String,
     name: String,
 ) -> Result<(), ResolveError> {
     let client = application.clone().map(ApplicationMessage::Client);
     let (_, server) = resolver
-        .resolve(|_| client, ServerAddress::Remote(server), Token { name })
+        .resolve(|_| client, ServerAddress::Remote(address), Token { name })
         .await?;
-    application.send(ApplicationMessage::Connect(server));
+    application.send(ApplicationMessage::Connected(server));
     Ok(())
 }
 
@@ -355,7 +404,6 @@ impl Application {
         self.last_update = Instant::now();
         let distance = duration.as_secs_f32() * 10.0;
         self.time += duration.as_secs_f32();
-        let angle = duration.as_secs_f32() * f32::pi() * 1.0;
         let mut translation = Vector3::<f32>::zeros();
         if self.control_state.forward {
             translation.z -= distance;
@@ -372,24 +420,6 @@ impl Application {
         let translation: Translation3<_> =
             (self.context.scene.camera.rotation() * translation).into();
         self.context.scene.camera.translation *= translation;
-        if self.context.debug.rotate_cubes {
-            let rotation = UnitQuaternion::from_euler_angles(angle, angle, angle);
-            let mut i = 0;
-            for x in -20..21 {
-                for y in -20..21 {
-                    for z in -20..21 {
-                        let object = &mut self.context.scene.objects[i];
-                        object.transform.rotation *= rotation;
-                        object.transform.translation = Vector3::new(
-                            x as f32 * 3.0 + (self.time * 1.5).sin(),
-                            y as f32 * 3.0 + (self.time * 1.5).cos(),
-                            z as f32 * 3.0,
-                        );
-                        i += 1;
-                    }
-                }
-            }
-        }
     }
 
     fn set_grab(&mut self, grab: bool) -> Result<(), Error> {
@@ -448,6 +478,5 @@ fn create_swapchain(
 }
 
 fn main() -> Result<(), Error> {
-    env_logger::init();
     run::<Application>(Runtime::new()?);
 }
