@@ -3,6 +3,7 @@ use std::fmt::Display;
 use net::{FromBiStream, FromDatagram, FromUniStream, Message};
 use quinn::SendStream;
 
+#[derive(Debug)]
 pub struct ServerMessage;
 
 impl FromDatagram for ServerMessage {
@@ -45,6 +46,7 @@ impl Message for ServerMessage {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientMessage;
 
 impl FromDatagram for ClientMessage {

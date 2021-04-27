@@ -12,7 +12,7 @@ mod surface;
 mod swapchain;
 mod version;
 
-use std::ffi::CStr;
+use std::{ffi::CStr, os::raw::c_char};
 
 use ash::vk;
 
@@ -73,9 +73,13 @@ pub type ApiResult = vk::Result;
 
 pub fn contains_extension(extensions: &[ExtensionProperties], extension_name: &CStr) -> bool {
     for extension in extensions {
-        if extension_name == unsafe { CStr::from_ptr(extension.extension_name.as_ptr()) } {
+        if extension_name == unsafe { to_cstr(&extension.extension_name) } {
             return true;
         }
     }
     false
+}
+
+unsafe fn to_cstr(data: &[c_char]) -> &CStr {
+    CStr::from_ptr(data.as_ptr())
 }

@@ -15,11 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          components: rustfmt, clippy
+        run: rustup show
       - name: Cache
         uses: Swatinem/rust-cache@v1
       - name: Format

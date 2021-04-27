@@ -1952,15 +1952,15 @@ dependencies = [
  "tokio",
  "webbrowser",
  "winit",
- "wosim-common-actor",
- "wosim-common-build",
- "wosim-common-util",
- "wosim-common-vulkan",
+ "wosim-actor",
+ "wosim-build",
  "wosim-server",
+ "wosim-util",
+ "wosim-vulkan",
 ]
 
 [[package]]
-name = "wosim-common-actor"
+name = "wosim-actor"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -1969,14 +1969,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "wosim-common-build"
+name = "wosim-build"
 version = "0.1.0"
 dependencies = [
  "shaderc",
 ]
 
 [[package]]
-name = "wosim-common-net"
+name = "wosim-net"
 version = "0.1.0"
 dependencies = [
  "bincode",
@@ -1986,25 +1986,8 @@ dependencies = [
  "quinn",
  "serde",
  "tokio",
- "wosim-common-actor",
- "wosim-common-util",
-]
-
-[[package]]
-name = "wosim-common-util"
-version = "0.1.0"
-dependencies = [
- "cfg-if 1.0.0",
- "memmap",
-]
-
-[[package]]
-name = "wosim-common-vulkan"
-version = "0.1.0"
-dependencies = [
- "ash",
- "bytemuck",
- "vk-mem",
+ "wosim-actor",
+ "wosim-util",
 ]
 
 [[package]]
@@ -2018,10 +2001,27 @@ dependencies = [
  "serde",
  "tokio",
  "webpki",
- "wosim-common-actor",
- "wosim-common-net",
- "wosim-common-util",
- "wosim-common-vulkan",
+ "wosim-actor",
+ "wosim-net",
+ "wosim-util",
+ "wosim-vulkan",
+]
+
+[[package]]
+name = "wosim-util"
+version = "0.1.0"
+dependencies = [
+ "cfg-if 1.0.0",
+ "memmap",
+]
+
+[[package]]
+name = "wosim-vulkan"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "bytemuck",
+ "vk-mem",
 ]
 
 [[package]]

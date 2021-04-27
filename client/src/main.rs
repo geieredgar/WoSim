@@ -1,19 +1,25 @@
 use std::{
-    ffi::CString, fmt::Debug, fs::read, fs::read_dir, future::Future, sync::Arc, time::Instant,
+    cell::RefCell,
+    ffi::CString,
+    fmt::Debug,
+    fs::read,
+    fs::read_dir,
+    future::Future,
+    sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use crate::winit::run;
+use crate::winit::{run, Event, EventLoop, Request, UserEvent};
 use ::vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
 use ::winit::{
-    dpi::{PhysicalPosition, Position},
-    event::{DeviceEvent, ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget},
+    dpi::{PhysicalPosition, PhysicalSize, Position},
+    event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use actor::Address;
+use actor::{mailbox, Actor, Address};
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
@@ -28,7 +34,7 @@ use server::{
     SessionMessage, Token,
 };
 use tokio::{runtime::Runtime, spawn};
-use util::iterator::MaxOkFilterMap;
+use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 
 mod context;
 mod cull;
@@ -43,8 +49,6 @@ mod shaders;
 mod view;
 mod vulkan;
 mod winit;
-
-pub use crate::winit::EventResult;
 
 struct Application {
     address: Address<ApplicationMessage>,
@@ -62,46 +66,13 @@ struct Application {
     _server: Option<Address<ServerMessage>>,
     resolver: Arc<Resolver>,
     windows: DebugWindows,
+    winit: Address<Request>,
 }
 
-pub enum ApplicationMessage {
-    Client(SessionMessage<(), ClientMessage>),
-    Connected(Address<ServerMessage>),
-    Connect { address: String, username: String },
-    Disconnect,
-    Log(Level, String, String),
-}
-
-struct ApplicationLogger {
-    address: Address<ApplicationMessage>,
-    secondary: env_logger::Logger,
-}
-
-impl Log for ApplicationLogger {
-    fn enabled(&self, _: &log::Metadata) -> bool {
-        true
-    }
-
-    fn log(&self, record: &log::Record) {
-        self.address.send(ApplicationMessage::Log(
-            record.level(),
-            record.target().to_owned(),
-            format!("{}", record.args()),
-        ));
-        self.secondary.log(record);
-    }
-
-    fn flush(&self) {
-        self.secondary.flush();
-    }
-}
-
-impl winit::Application for Application {
-    type Message = ApplicationMessage;
-    type Error = Error;
-
+impl Application {
     fn new(
-        event_loop: &EventLoop<ApplicationMessage>,
+        event_loop: &EventLoop,
+        winit: Address<Request>,
         address: Address<ApplicationMessage>,
     ) -> Result<Self, Error> {
         log::set_boxed_logger(Box::new(ApplicationLogger {
@@ -145,6 +116,7 @@ impl winit::Application for Application {
             .filter_map(|entry| entry.ok().map(|entry| read(entry.path()).ok()).flatten())
             .filter_map(|pem| Certificate::from_pem(&pem).ok())
             .collect();
+        address.send(ApplicationMessage::Render);
         Ok(Self {
             address,
             renderer,
@@ -166,156 +138,59 @@ impl winit::Application for Application {
             _server: None,
             resolver: Arc::new(Resolver::new(certificates)),
             windows: DebugWindows::default(),
+            winit,
         })
     }
 
-    fn handle_event(
-        &mut self,
-        event: Event<()>,
-        _target: &EventLoopWindowTarget<ApplicationMessage>,
-    ) -> Result<ControlFlow, Error> {
-        if self.handle_early_mouse_grab(&event).is_handled() {
-            return Ok(ControlFlow::Poll);
-        }
-        if self.context.egui.handle_event(&event).is_handled() {
-            return Ok(ControlFlow::Poll);
-        }
-        match event {
+    fn spawn(event_loop: &EventLoop, winit: Address<Request>) -> Result<Address<Event>, Error> {
+        let (mailbox, address) = mailbox();
+        let state = Arc::new(Mutex::new(Some(Self::new(
+            event_loop,
+            winit,
+            address.clone(),
+        )?)));
+        spawn(Actor::new(mailbox, move |message| {
+            report(Application::handle(state.clone(), message))
+        }));
+        Ok(address.filter_map(|event| match event {
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(_) => {
-                    self.recreate_renderer()?;
-                }
-                WindowEvent::CloseRequested => return Ok(ControlFlow::Exit),
-                WindowEvent::KeyboardInput {
-                    device_id: _,
-                    input,
-                    is_synthetic: _,
-                } => {
-                    if let Some(keycode) = input.virtual_keycode {
-                        match keycode {
-                            VirtualKeyCode::W => {
-                                self.control_state.forward = input.state == ElementState::Pressed;
-                            }
-
-                            VirtualKeyCode::A => {
-                                self.control_state.left = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::S => {
-                                self.control_state.backward = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::D => {
-                                self.control_state.right = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::F1 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.configuration = !self.windows.configuration;
-                                }
-                            }
-                            VirtualKeyCode::F2 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.information = !self.windows.information;
-                                }
-                            }
-                            VirtualKeyCode::F3 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.frame_times = !self.windows.frame_times;
-                                }
-                            }
-                            VirtualKeyCode::F4 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.log = !self.windows.log;
-                                }
-                            }
-                            VirtualKeyCode::F9 => {
-                                if input.state == ElementState::Pressed {
-                                    self.vsync = !self.vsync;
-                                    self.recreate_renderer()?;
-                                }
-                            }
-                            VirtualKeyCode::F10 => {
-                                if input.state == ElementState::Pressed {
-                                    if self.window.fullscreen().is_some() {
-                                        self.window.set_fullscreen(None);
-                                    } else {
-                                        self.window
-                                            .set_fullscreen(Some(Fullscreen::Borderless(None)));
-                                    }
-                                }
-                            }
-                            VirtualKeyCode::Escape => self.set_grab(false)?,
-                            _ => {}
-                        }
-                    }
-                }
-                WindowEvent::MouseInput { button, .. } => {
-                    if button == MouseButton::Left {
-                        self.set_grab(true)?;
-                    };
-                }
-                WindowEvent::Focused(focus) => {
-                    if !focus {
-                        self.set_grab(false)?;
-                    }
-                }
-                _ => {}
+                WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
+                event => Some(ApplicationMessage::WindowEvent(event)),
             },
-            Event::DeviceEvent {
-                device_id: _,
-                event,
-            } => {
-                if self.grab {
-                    if let DeviceEvent::MouseMotion { delta } = event {
-                        self.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
-                        self.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
-                        self.context.scene.camera.pitch = self
-                            .context
-                            .scene
-                            .camera
-                            .pitch
-                            .clamp(-f32::pi() / 2.0, f32::pi() / 2.0);
-                    }
-                }
+            Event::DeviceEvent { device_id, event } => {
+                Some(ApplicationMessage::DeviceEvent(device_id, event))
             }
-            Event::MainEventsCleared => {
-                self.update();
-                self.context.debug.begin_frame();
-                let ctx = self.context.egui.begin();
-                self.context.debug.render(&ctx, &mut self.windows);
-                self.context
-                    .egui
-                    .end(if self.grab { None } else { Some(&self.window) })?;
-                let result = self.renderer.render(&self.device, &mut self.context);
-                let (resize, timestamps) = match result {
-                    Ok(result) => (result.suboptimal, result.timestamps),
-                    Err(err) => match err {
-                        Error::Vulkan(vulkan_err) => match vulkan_err {
-                            ::vulkan::Error::ApiResult(result) => {
-                                if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                                    (true, None)
-                                } else {
-                                    return Err(Error::Vulkan(vulkan_err));
-                                }
-                            }
-                            _ => return Err(Error::Vulkan(vulkan_err)),
-                        },
-                        _ => return Err(err),
-                    },
-                };
-                self.context.debug.end_frame(timestamps);
-                if resize {
-                    self.recreate_renderer()?;
-                }
-            }
-            _ => {}
-        }
-        Ok(ControlFlow::Poll)
+            Event::UserEvent(UserEvent::ScaleFactorChanged {
+                new_inner_size,
+                scale_factor,
+                ..
+            }) => Some(ApplicationMessage::ScaleFactorChanged(
+                scale_factor,
+                new_inner_size,
+            )),
+            _ => None,
+        }))
     }
 
-    fn handle_message(
-        &mut self,
+    async fn handle(
+        state: Arc<Mutex<Option<Self>>>,
         message: ApplicationMessage,
-        _target: &EventLoopWindowTarget<ApplicationMessage>,
-    ) -> Result<ControlFlow, Error> {
+    ) -> Result<(), Error> {
+        let mut state = state.lock().unwrap();
+        if state.is_none() {
+            return Ok(());
+        }
+        if let ApplicationMessage::ExitRequested = message {
+            state.take().unwrap().winit.send(Request::Exit);
+            return Ok(());
+        }
+        let state = state.as_mut().unwrap();
+        if state.handle_early_mouse_grab(&message).is_handled() {
+            return Ok(());
+        }
+        if state.context.egui.handle_event(&message).is_handled() {
+            return Ok(());
+        }
         match message {
             ApplicationMessage::Client(message) => match message {
                 SessionMessage::Connect(_) => {
@@ -324,65 +199,168 @@ impl winit::Application for Application {
                 SessionMessage::Message(_, _) => {}
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
-                    self._server = None;
-                    self.context.debug.connection_status_changed(false);
+                    state._server = None;
+                    state.context.debug.connection_status_changed(false);
                 }
             },
             ApplicationMessage::Connected(server) => {
-                self._server = Some(server);
-                self.context.debug.connection_status_changed(true);
+                state._server = Some(server);
+                state.context.debug.connection_status_changed(true);
             }
             ApplicationMessage::Connect { address, username } => {
                 spawn(report(connect_to_server(
-                    self.address.clone(),
-                    self.resolver.clone(),
+                    state.address.clone(),
+                    state.resolver.clone(),
                     address,
                     username,
                 )));
             }
             ApplicationMessage::Disconnect => {
-                self._server = None;
+                state._server = None;
             }
             ApplicationMessage::Log(level, target, args) => {
-                self.context.debug.log(level, target, args);
+                state.context.debug.log(level, target, args);
             }
+            ApplicationMessage::Render => {
+                state.render()?;
+            }
+            ApplicationMessage::WindowEvent(event) => match event {
+                WindowEvent::Resized(_) => {
+                    state.recreate_renderer()?;
+                }
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input,
+                    is_synthetic: _,
+                } => {
+                    if let Some(keycode) = input.virtual_keycode {
+                        match keycode {
+                            VirtualKeyCode::W => {
+                                state.control_state.forward = input.state == ElementState::Pressed;
+                            }
+
+                            VirtualKeyCode::A => {
+                                state.control_state.left = input.state == ElementState::Pressed;
+                            }
+                            VirtualKeyCode::S => {
+                                state.control_state.backward = input.state == ElementState::Pressed;
+                            }
+                            VirtualKeyCode::D => {
+                                state.control_state.right = input.state == ElementState::Pressed;
+                            }
+                            VirtualKeyCode::F1 => {
+                                if input.state == ElementState::Pressed {
+                                    state.windows.configuration = !state.windows.configuration;
+                                }
+                            }
+                            VirtualKeyCode::F2 => {
+                                if input.state == ElementState::Pressed {
+                                    state.windows.information = !state.windows.information;
+                                }
+                            }
+                            VirtualKeyCode::F3 => {
+                                if input.state == ElementState::Pressed {
+                                    state.windows.frame_times = !state.windows.frame_times;
+                                }
+                            }
+                            VirtualKeyCode::F4 => {
+                                if input.state == ElementState::Pressed {
+                                    state.windows.log = !state.windows.log;
+                                }
+                            }
+                            VirtualKeyCode::F9 => {
+                                if input.state == ElementState::Pressed {
+                                    state.vsync = !state.vsync;
+                                    state.recreate_renderer()?;
+                                }
+                            }
+                            VirtualKeyCode::F10 => {
+                                if input.state == ElementState::Pressed {
+                                    if state.window.fullscreen().is_some() {
+                                        state.window.set_fullscreen(None);
+                                    } else {
+                                        state
+                                            .window
+                                            .set_fullscreen(Some(Fullscreen::Borderless(None)));
+                                    }
+                                }
+                            }
+                            VirtualKeyCode::Escape => state.set_grab(false)?,
+                            _ => {}
+                        }
+                    }
+                }
+                WindowEvent::MouseInput { button, .. } => {
+                    if button == MouseButton::Left {
+                        state.set_grab(true)?;
+                    };
+                }
+                WindowEvent::Focused(focus) => {
+                    if !focus {
+                        state.set_grab(false)?;
+                    }
+                }
+                _ => {}
+            },
+            ApplicationMessage::DeviceEvent(_, event) => {
+                if state.grab {
+                    if let DeviceEvent::MouseMotion { delta } = event {
+                        state.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
+                        state.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
+                        state.context.scene.camera.pitch = state
+                            .context
+                            .scene
+                            .camera
+                            .pitch
+                            .clamp(-f32::pi() / 2.0, f32::pi() / 2.0);
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn render(&mut self) -> Result<(), Error> {
+        self.update();
+        self.context.debug.begin_frame();
+        let ctx = self.context.egui.begin();
+        self.context.debug.render(&ctx, &mut self.windows);
+        self.context
+            .egui
+            .end(if self.grab { None } else { Some(&self.window) })?;
+        let result = self.renderer.render(&self.device, &mut self.context);
+        let (resize, timestamps) = match result {
+            Ok(result) => (result.suboptimal, result.timestamps),
+            Err(err) => match err {
+                Error::Vulkan(vulkan_err) => match vulkan_err {
+                    ::vulkan::Error::ApiResult(result) => {
+                        if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
+                            (true, None)
+                        } else {
+                            return Err(Error::Vulkan(vulkan_err));
+                        }
+                    }
+                    _ => return Err(Error::Vulkan(vulkan_err)),
+                },
+                _ => return Err(err),
+            },
         };
-        Ok(ControlFlow::Poll)
+        self.context.debug.end_frame(timestamps);
+        if resize {
+            self.recreate_renderer()?;
+        }
+        self.address.send(ApplicationMessage::Render);
+        Ok(())
     }
-}
 
-async fn connect_to_server(
-    application: Address<ApplicationMessage>,
-    resolver: Arc<Resolver>,
-    address: String,
-    name: String,
-) -> Result<(), ResolveError> {
-    let client = application.clone().map(ApplicationMessage::Client);
-    let (_, server) = resolver
-        .resolve(|_| client, ServerAddress::Remote(address), Token { name })
-        .await?;
-    application.send(ApplicationMessage::Connected(server));
-    Ok(())
-}
-
-async fn report<E: Debug>(f: impl Future<Output = Result<(), E>>) {
-    if let Err(error) = f.await {
-        error!("Task failed: {:?}", error);
-    }
-}
-
-impl Application {
-    fn handle_early_mouse_grab(&mut self, event: &Event<()>) -> EventResult {
+    fn handle_early_mouse_grab(&mut self, message: &ApplicationMessage) -> HandleFlow {
         if self.grab {
-            if let Event::WindowEvent {
-                event: WindowEvent::CursorMoved { .. },
-                ..
-            } = event
-            {
-                return EventResult::Handled;
+            if let ApplicationMessage::WindowEvent(WindowEvent::CursorMoved { .. }) = message {
+                return HandleFlow::Handled;
             }
         }
-        EventResult::Unhandled
+        HandleFlow::Unhandled
     }
 
     fn recreate_renderer(&mut self) -> Result<(), Error> {
@@ -451,6 +429,70 @@ impl Drop for Application {
     }
 }
 
+#[derive(Debug)]
+pub enum ApplicationMessage {
+    Client(SessionMessage<(), ClientMessage>),
+    Connected(Address<ServerMessage>),
+    Render,
+    Connect { address: String, username: String },
+    Disconnect,
+    Log(Level, String, String),
+    ScaleFactorChanged(f64, PhysicalSize<u32>),
+    ExitRequested,
+    WindowEvent(WindowEvent<'static>),
+    DeviceEvent(DeviceId, DeviceEvent),
+}
+
+struct ApplicationLogger {
+    address: Address<ApplicationMessage>,
+    secondary: env_logger::Logger,
+}
+
+thread_local! {static INSIDE_LOG: RefCell<bool> = RefCell::new(false)}
+
+impl Log for ApplicationLogger {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        if INSIDE_LOG.with(|i| i.replace(true)) {
+            return;
+        }
+        self.address.send(ApplicationMessage::Log(
+            record.level(),
+            record.target().to_owned(),
+            format!("{}", record.args()),
+        ));
+        self.secondary.log(record);
+        INSIDE_LOG.with(|i| i.replace(false));
+    }
+
+    fn flush(&self) {
+        self.secondary.flush();
+    }
+}
+
+async fn connect_to_server(
+    application: Address<ApplicationMessage>,
+    resolver: Arc<Resolver>,
+    address: String,
+    name: String,
+) -> Result<(), ResolveError> {
+    let client = application.clone().map(ApplicationMessage::Client);
+    let (_, server) = resolver
+        .resolve(|_| client, ServerAddress::Remote(address), Token { name })
+        .await?;
+    application.send(ApplicationMessage::Connected(server));
+    Ok(())
+}
+
+async fn report<E: Debug>(f: impl Future<Output = Result<(), E>>) {
+    if let Err(error) = f.await {
+        error!("Task failed: {:?}", error);
+    }
+}
+
 fn create_swapchain(
     device: &Arc<Device>,
     surface: &Surface,
@@ -478,5 +520,5 @@ fn create_swapchain(
 }
 
 fn main() -> Result<(), Error> {
-    run::<Application>(Runtime::new()?);
+    run(Runtime::new()?, Application::spawn);
 }

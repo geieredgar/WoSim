@@ -8,82 +8,85 @@ use actor::{Address, Sender};
 use log::warn;
 use tokio::runtime::Runtime;
 use winit::{
-    event::Event,
-    event_loop::{ControlFlow, EventLoop, EventLoopProxy, EventLoopWindowTarget},
+    dpi::PhysicalSize,
+    event::WindowEvent,
+    event_loop::{ControlFlow, EventLoopProxy},
+    window::WindowId,
 };
 
-#[derive(Clone, Copy)]
-pub enum EventResult {
-    Handled,
-    Unhandled,
+pub type EventLoop = winit::event_loop::EventLoop<Request>;
+
+pub type Event = winit::event::Event<'static, UserEvent>;
+
+type InternalEvent<'a> = winit::event::Event<'a, Request>;
+
+#[derive(Debug)]
+pub enum Request {
+    Exit,
 }
 
-impl EventResult {
-    pub fn is_handled(self) -> bool {
-        match self {
-            EventResult::Handled => true,
-            EventResult::Unhandled => false,
-        }
-    }
+#[derive(Debug)]
+pub enum UserEvent {
+    ScaleFactorChanged {
+        window_id: WindowId,
+        scale_factor: f64,
+        new_inner_size: PhysicalSize<u32>,
+    },
 }
 
-pub trait Application: 'static + Sized {
-    type Message: 'static + Send;
-    type Error: Error;
-
-    fn new(
-        event_loop: &EventLoop<Self::Message>,
-        address: Address<Self::Message>,
-    ) -> Result<Self, Self::Error>;
-
-    fn handle_event(
-        &mut self,
-        event: Event<'_, ()>,
-        target: &EventLoopWindowTarget<Self::Message>,
-    ) -> Result<ControlFlow, Self::Error>;
-
-    fn handle_message(
-        &mut self,
-        message: Self::Message,
-        target: &EventLoopWindowTarget<Self::Message>,
-    ) -> Result<ControlFlow, Self::Error>;
-}
-
-pub fn run<T: Application>(runtime: Runtime) -> ! {
+pub fn run<F: FnOnce(&EventLoop, Address<Request>) -> Result<Address<Event>, E>, E: Error>(
+    runtime: Runtime,
+    factory: F,
+) -> ! {
     let event_loop = EventLoop::with_user_event();
     let address = Address::new(Arc::new(EventLoopSender(Mutex::new(
         event_loop.create_proxy(),
     ))));
     let guard = runtime.enter();
-    let mut application = match T::new(&event_loop, address) {
-        Ok(application) => application,
+    let address = match factory(&event_loop, address) {
+        Ok(address) => address,
         Err(error) => {
             log::error!("Failed to setup application: {}", error);
             exit(1);
         }
     };
     drop(guard);
-    event_loop.run(move |event, target, control_flow| {
+    event_loop.run(move |event, _, control_flow| {
         let _guard = runtime.enter();
-        let result = match event.map_nonuser_event::<()>() {
-            Ok(event) => application.handle_event(event, target),
-            Err(Event::UserEvent(message)) => application.handle_message(message, target),
-            Err(_) => panic!("Unexpected error"),
-        };
-        match result {
-            Ok(flow) => *control_flow = flow,
-            Err(error) => {
-                log::error!("Exiting loop because of error: {}", error);
-                *control_flow = ControlFlow::Exit;
-            }
-        };
+        if let InternalEvent::UserEvent(Request::Exit) = &event {
+            *control_flow = ControlFlow::Exit;
+            return;
+        }
+        if let Some(event) = map(event) {
+            address.send(event);
+        }
+        *control_flow = ControlFlow::Wait
     })
 }
 
-struct EventLoopSender<T: 'static>(Mutex<EventLoopProxy<T>>);
+fn map(event: InternalEvent<'_>) -> Option<Event> {
+    if let InternalEvent::WindowEvent {
+        window_id,
+        event:
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                new_inner_size,
+            },
+    } = &event
+    {
+        return Some(Event::UserEvent(UserEvent::ScaleFactorChanged {
+            window_id: *window_id,
+            scale_factor: *scale_factor,
+            new_inner_size: **new_inner_size,
+        }));
+    }
+    event.to_static()?.map_nonuser_event().ok()
+}
 
-impl<T: 'static + Send> Sender<T> for EventLoopSender<T> {
-    fn send(&self, message: T) {
+struct EventLoopSender(Mutex<EventLoopProxy<Request>>);
+
+impl Sender<Request> for EventLoopSender {
+    fn send(&self, message: Request) {
         if let Err(error) = self.0.lock().unwrap().send_event(message) {
             warn!(
                 "Sending failed. Event loop already closed. Error: {}",
