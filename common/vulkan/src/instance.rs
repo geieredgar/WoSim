@@ -10,10 +10,13 @@ use ash::{
     Entry,
 };
 
+use crate::to_cstr;
+
 use super::{Error, PhysicalDevice, Surface, Version};
 
 pub struct Instance {
     pub(super) inner: ash::Instance,
+    pub(super) physical_device_properties_2_support: bool,
     pub(super) entry: Entry,
 }
 
@@ -29,6 +32,15 @@ impl Instance {
         } else {
             vec![]
         };
+        let mut physical_device_properties_2_support = false;
+        for properties in entry.enumerate_instance_extension_properties()? {
+            if unsafe { to_cstr(&properties.extension_name) }
+                == ash::vk::KhrGetPhysicalDeviceProperties2Fn::name()
+                && properties.spec_version >= 2
+            {
+                physical_device_properties_2_support = true;
+            }
+        }
         let application_info = ApplicationInfo::builder()
             .api_version(make_version(1, 2, 0))
             .application_name(application_name)
@@ -41,7 +53,11 @@ impl Instance {
             .application_info(&application_info)
             .build();
         let inner = unsafe { entry.create_instance(&create_info, None) }?;
-        Ok(Self { inner, entry })
+        Ok(Self {
+            inner,
+            physical_device_properties_2_support,
+            entry,
+        })
     }
 
     pub fn create_surface<F: Fn(&Entry, &ash::Instance) -> VkResult<SurfaceKHR>>(
