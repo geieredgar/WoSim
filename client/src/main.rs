@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     ffi::CString,
     fmt::Debug,
     fs::read,
@@ -454,18 +455,24 @@ struct ApplicationLogger {
     secondary: env_logger::Logger,
 }
 
+thread_local! {static INSIDE_LOG: RefCell<bool> = RefCell::new(false)}
+
 impl Log for ApplicationLogger {
     fn enabled(&self, _: &log::Metadata) -> bool {
         true
     }
 
     fn log(&self, record: &log::Record) {
+        if INSIDE_LOG.with(|i| i.replace(true)) {
+            return;
+        }
         self.address.send(ApplicationMessage::Log(
             record.level(),
             record.target().to_owned(),
             format!("{}", record.args()),
         ));
         self.secondary.log(record);
+        INSIDE_LOG.with(|i| i.replace(false));
     }
 
     fn flush(&self) {
