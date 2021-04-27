@@ -34,10 +34,7 @@ use server::{
     SessionMessage, Token,
 };
 use tokio::{runtime::Runtime, spawn};
-use util::{
-    handle::{HandleFlow, HandleFlowExt, HandleFlowResultExt},
-    iterator::MaxOkFilterMap,
-};
+use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 
 mod context;
 mod cull;
@@ -188,16 +185,12 @@ impl Application {
             return Ok(());
         }
         let state = state.as_mut().unwrap();
-        state
-            .handle_early_mouse_grab(&message)
-            .into_flow_result::<Error>()
-            .into_result()?;
-        state
-            .context
-            .egui
-            .handle_event(&message)
-            .into_flow_result::<Error>()
-            .into_result()?;
+        if state.handle_early_mouse_grab(&message).is_handled() {
+            return Ok(());
+        }
+        if state.context.egui.handle_event(&message).is_handled() {
+            return Ok(());
+        }
         match message {
             ApplicationMessage::Client(message) => match message {
                 SessionMessage::Connect(_) => {
@@ -364,10 +357,10 @@ impl Application {
     fn handle_early_mouse_grab(&mut self, message: &ApplicationMessage) -> HandleFlow {
         if self.grab {
             if let ApplicationMessage::WindowEvent(WindowEvent::CursorMoved { .. }) = message {
-                return HandleFlow::handled();
+                return HandleFlow::Handled;
             }
         }
-        HandleFlow::unhandled()
+        HandleFlow::Unhandled
     }
 
     fn recreate_renderer(&mut self) -> Result<(), Error> {

@@ -11,7 +11,7 @@ use winit::{
     window::{CursorIcon, Window},
 };
 
-use util::{handle::HandleFlow, handle::HandleFlowExt, shader::align_bytes};
+use util::{handle::HandleFlow, shader::align_bytes};
 use vulkan::{
     DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
     DescriptorType, Device, Filter, PipelineLayout, PipelineLayoutCreateFlags, PushConstantRange,
@@ -131,7 +131,7 @@ impl EguiContext {
                 WindowEvent::ReceivedCharacter(c) => {
                     if self.inner.wants_keyboard_input() && !c.is_ascii_control() {
                         self.input.events.push(Event::Text(c.to_string()));
-                        HandleFlow::handled()?;
+                        return HandleFlow::Handled;
                     }
                 }
                 WindowEvent::KeyboardInput { input, .. } => {
@@ -143,7 +143,7 @@ impl EguiContext {
                                     pressed: input.state == ElementState::Pressed,
                                     modifiers: self.modifiers,
                                 });
-                                HandleFlow::handled()?;
+                                return HandleFlow::Handled;
                             }
                         }
                     }
@@ -186,7 +186,7 @@ impl EguiContext {
                             modifiers: self.modifiers,
                         });
                         if self.inner.wants_pointer_input() {
-                            return HandleFlow::handled();
+                            return HandleFlow::Handled;
                         }
                     }
                 }
@@ -203,7 +203,7 @@ impl EguiContext {
                 } / self.scale_factor(),
             ));
         }
-        HandleFlow::unhandled()
+        HandleFlow::Unhandled
     }
 
     pub fn begin(&mut self) -> CtxRef {
