@@ -142,7 +142,7 @@ impl DebugContext {
             });
             if let Some(front) = self.frame_times.front() {
                 let origin = front.0;
-                let plot = Plot::default()
+                let plot = Plot::new("frame_times")
                     .include_x(0.0)
                     .include_x(self.frame_times_secs)
                     .include_y(0.0);
