@@ -1,11 +1,10 @@
-use actor::Return;
 use log::{error, warn};
 use quinn::SendStream;
 use serde::Serialize;
-use tokio::spawn;
+use tokio::{spawn, sync::oneshot::Sender};
 
 pub enum ReturnAddress<T: Serialize + Send + 'static> {
-    Local(Return<T>),
+    Local(Sender<T>),
     Remote(SendStream),
 }
 
@@ -39,8 +38,8 @@ impl<T: Serialize + Send + 'static> ReturnAddress<T> {
     }
 }
 
-impl<T: Serialize + Send + 'static> From<Return<T>> for ReturnAddress<T> {
-    fn from(ret: Return<T>) -> Self {
-        ReturnAddress::Local(ret)
+impl<T: Serialize + Send + 'static> From<Sender<T>> for ReturnAddress<T> {
+    fn from(sender: Sender<T>) -> Self {
+        ReturnAddress::Local(sender)
     }
 }
