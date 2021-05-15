@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use egui::{ClippedMesh, CtxRef, Event, Key, Modifiers, PointerButton, Pos2, RawInput, Vec2};
 
@@ -39,7 +39,7 @@ pub struct EguiContext {
     pub(super) font: Option<Arc<Font>>,
     cursor_pos: Pos2,
     modifiers: Modifiers,
-    clipboard: ClipboardContext,
+    clipboard: Arc<Mutex<ClipboardContext>>,
 }
 
 impl EguiContext {
@@ -108,7 +108,9 @@ impl EguiContext {
             font: None,
             cursor_pos: Pos2::default(),
             modifiers: Modifiers::default(),
-            clipboard: ClipboardContext::new().map_err(super::Error::NewClipboardFailed)?,
+            clipboard: Arc::new(Mutex::new(
+                ClipboardContext::new().map_err(super::Error::NewClipboardFailed)?,
+            )),
         })
     }
 
@@ -225,6 +227,8 @@ impl EguiContext {
         }
         if !output.copied_text.is_empty() {
             self.clipboard
+                .lock()
+                .unwrap()
                 .set_contents(output.copied_text)
                 .map_err(super::Error::SetClipboardContents)?;
         }
