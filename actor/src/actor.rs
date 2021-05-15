@@ -1,63 +1,73 @@
-use std::{
-    future::Future,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::{future::Future, marker::PhantomData, sync::Arc};
 
-use crate::{Mailbox, TaskQueue};
+use tokio::spawn;
 
-pub struct Actor<H: Fn(M) -> T, M, T: Future<Output = ()>> {
-    mailbox: Mailbox<M>,
+use crate::{Address, Mailbox, Sender};
+
+pub struct AsyncActor<H, M>
+where
+    H: Fn(M) + Send + Sync + 'static,
+    M: Send + Sync + 'static,
+    H::Output: Future<Output = ()>,
+{
     handler: H,
-    queue: TaskQueue<T>,
-    closed: bool,
+    _phantom: PhantomData<M>,
 }
 
-impl<
-        H: Send + Sync + 'static + Fn(M) -> T,
-        M: Send + Sync + 'static,
-        T: Future<Output = ()> + Send + Sync + 'static,
-    > Actor<H, M, T>
+impl<H, M> AsyncActor<H, M>
+where
+    H: Fn(M) + Send + Sync + 'static,
+    M: Send + Sync + 'static,
+    H::Output: Future<Output = ()>,
 {
-    pub fn new(mailbox: Mailbox<M>, handler: H) -> Self {
-        Self {
-            mailbox,
+    pub fn address(handler: H) -> Address<M> {
+        Address::new(Arc::new(Self {
             handler,
-            queue: TaskQueue::new(),
-            closed: false,
-        }
+            _phantom: PhantomData,
+        }))
     }
 }
 
-impl<H: Fn(M) -> T, M, T: Future<Output = ()>> Future for Actor<H, M, T> {
-    type Output = ();
+impl<H, M> Sender<M> for AsyncActor<H, M>
+where
+    H: Fn(M) + Send + Sync + 'static,
+    M: Send + Sync + 'static,
+    H::Output: Future<Output = ()>,
+{
+    fn send(&self, message: M) {
+        #[allow(clippy::unit_arg)]
+        spawn((self.handler)(message));
+    }
+}
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        let mut pending = match Pin::new(&mut this.queue).poll(cx) {
-            Poll::Ready(()) => false,
-            Poll::Pending => true,
-        };
-        loop {
-            if !this.closed {
-                match this.mailbox.poll_recv(cx) {
-                    Poll::Ready(next) => {
-                        if let Some(message) = next {
-                            match this.queue.push((this.handler)(message)) {
-                                Poll::Ready(()) => {}
-                                Poll::Pending => pending = true,
-                            }
-                        } else {
-                            this.closed = true;
-                        }
-                    }
-                    Poll::Pending => break Poll::Pending,
-                }
-            } else if pending {
-                break Poll::Pending;
-            } else {
-                break Poll::Ready(());
+pub struct Actor<H, M>
+where
+    H: Send + Sync + 'static + FnMut(M) -> ControlFlow,
+    M: Send + Sync + 'static,
+{
+    mailbox: Mailbox<M>,
+    handler: H,
+}
+
+impl<H, M> Actor<H, M>
+where
+    H: Send + Sync + 'static + FnMut(M) -> ControlFlow,
+    M: Send + Sync + 'static,
+{
+    pub fn new(mailbox: Mailbox<M>, handler: H) -> Self {
+        Self { mailbox, handler }
+    }
+
+    pub async fn run(&mut self) {
+        while let Some(message) = self.mailbox.recv().await {
+            if let ControlFlow::Stop = (self.handler)(message) {
+                return;
             }
         }
     }
+}
+
+pub enum ControlFlow {
+    Continue,
+    Stop,
 }
