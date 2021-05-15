@@ -1,11 +1,5 @@
 use std::{
-    cell::RefCell,
-    ffi::CString,
-    fmt::Debug,
-    fs::read,
-    fs::read_dir,
-    future::Future,
-    sync::{Arc, Mutex},
+    cell::RefCell, ffi::CString, fmt::Debug, fs::read, fs::read_dir, future::Future, sync::Arc,
     time::Instant,
 };
 
@@ -19,7 +13,7 @@ use ::winit::{
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use actor::{mailbox, Actor, Address};
+use actor::{mailbox, Actor, Address, ControlFlow};
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
@@ -144,14 +138,17 @@ impl Application {
 
     fn spawn(event_loop: &EventLoop, winit: Address<Request>) -> Result<Address<Event>, Error> {
         let (mailbox, address) = mailbox();
-        let state = Arc::new(Mutex::new(Some(Self::new(
-            event_loop,
-            winit,
-            address.clone(),
-        )?)));
-        spawn(Actor::new(mailbox, move |message| {
-            report(Application::handle(state.clone(), message))
-        }));
+        let mut application = Self::new(event_loop, winit, address.clone())?;
+        spawn(async move {
+            let mut actor = Actor::new(mailbox, move |message| match application.handle(message) {
+                Ok(flow) => flow,
+                Err(error) => {
+                    error!("Task failed: {:?}", error);
+                    ControlFlow::Stop
+                }
+            });
+            actor.run().await
+        });
         Ok(address.filter_map(|event| match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
@@ -172,24 +169,16 @@ impl Application {
         }))
     }
 
-    async fn handle(
-        state: Arc<Mutex<Option<Self>>>,
-        message: ApplicationMessage,
-    ) -> Result<(), Error> {
-        let mut state = state.lock().unwrap();
-        if state.is_none() {
-            return Ok(());
-        }
+    fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
         if let ApplicationMessage::ExitRequested = message {
-            state.take().unwrap().winit.send(Request::Exit);
-            return Ok(());
+            self.winit.send(Request::Exit);
+            return Ok(ControlFlow::Stop);
         }
-        let state = state.as_mut().unwrap();
-        if state.handle_early_mouse_grab(&message).is_handled() {
-            return Ok(());
+        if self.handle_early_mouse_grab(&message).is_handled() {
+            return Ok(ControlFlow::Continue);
         }
-        if state.context.egui.handle_event(&message).is_handled() {
-            return Ok(());
+        if self.context.egui.handle_event(&message).is_handled() {
+            return Ok(ControlFlow::Continue);
         }
         match message {
             ApplicationMessage::Client(message) => match message {
@@ -199,34 +188,34 @@ impl Application {
                 SessionMessage::Message(_, _) => {}
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
-                    state._server = None;
-                    state.context.debug.connection_status_changed(false);
+                    self._server = None;
+                    self.context.debug.connection_status_changed(false);
                 }
             },
             ApplicationMessage::Connected(server) => {
-                state._server = Some(server);
-                state.context.debug.connection_status_changed(true);
+                self._server = Some(server);
+                self.context.debug.connection_status_changed(true);
             }
             ApplicationMessage::Connect { address, username } => {
                 spawn(report(connect_to_server(
-                    state.address.clone(),
-                    state.resolver.clone(),
+                    self.address.clone(),
+                    self.resolver.clone(),
                     address,
                     username,
                 )));
             }
             ApplicationMessage::Disconnect => {
-                state._server = None;
+                self._server = None;
             }
             ApplicationMessage::Log(level, target, args) => {
-                state.context.debug.log(level, target, args);
+                self.context.debug.log(level, target, args);
             }
             ApplicationMessage::Render => {
-                state.render()?;
+                self.render()?;
             }
             ApplicationMessage::WindowEvent(event) => match event {
                 WindowEvent::Resized(_) => {
-                    state.recreate_renderer()?;
+                    self.recreate_renderer()?;
                 }
                 WindowEvent::KeyboardInput {
                     device_id: _,
@@ -236,78 +225,77 @@ impl Application {
                     if let Some(keycode) = input.virtual_keycode {
                         match keycode {
                             VirtualKeyCode::W => {
-                                state.control_state.forward = input.state == ElementState::Pressed;
+                                self.control_state.forward = input.state == ElementState::Pressed;
                             }
 
                             VirtualKeyCode::A => {
-                                state.control_state.left = input.state == ElementState::Pressed;
+                                self.control_state.left = input.state == ElementState::Pressed;
                             }
                             VirtualKeyCode::S => {
-                                state.control_state.backward = input.state == ElementState::Pressed;
+                                self.control_state.backward = input.state == ElementState::Pressed;
                             }
                             VirtualKeyCode::D => {
-                                state.control_state.right = input.state == ElementState::Pressed;
+                                self.control_state.right = input.state == ElementState::Pressed;
                             }
                             VirtualKeyCode::F1 => {
                                 if input.state == ElementState::Pressed {
-                                    state.windows.configuration = !state.windows.configuration;
+                                    self.windows.configuration = !self.windows.configuration;
                                 }
                             }
                             VirtualKeyCode::F2 => {
                                 if input.state == ElementState::Pressed {
-                                    state.windows.information = !state.windows.information;
+                                    self.windows.information = !self.windows.information;
                                 }
                             }
                             VirtualKeyCode::F3 => {
                                 if input.state == ElementState::Pressed {
-                                    state.windows.frame_times = !state.windows.frame_times;
+                                    self.windows.frame_times = !self.windows.frame_times;
                                 }
                             }
                             VirtualKeyCode::F4 => {
                                 if input.state == ElementState::Pressed {
-                                    state.windows.log = !state.windows.log;
+                                    self.windows.log = !self.windows.log;
                                 }
                             }
                             VirtualKeyCode::F9 => {
                                 if input.state == ElementState::Pressed {
-                                    state.vsync = !state.vsync;
-                                    state.recreate_renderer()?;
+                                    self.vsync = !self.vsync;
+                                    self.recreate_renderer()?;
                                 }
                             }
                             VirtualKeyCode::F10 => {
                                 if input.state == ElementState::Pressed {
-                                    if state.window.fullscreen().is_some() {
-                                        state.window.set_fullscreen(None);
+                                    if self.window.fullscreen().is_some() {
+                                        self.window.set_fullscreen(None);
                                     } else {
-                                        state
-                                            .window
+                                        self.window
                                             .set_fullscreen(Some(Fullscreen::Borderless(None)));
                                     }
                                 }
                             }
-                            VirtualKeyCode::Escape => state.set_grab(false)?,
+                            VirtualKeyCode::Escape => self.set_grab(false)?,
                             _ => {}
                         }
                     }
                 }
                 WindowEvent::MouseInput { button, .. } => {
                     if button == MouseButton::Left {
-                        state.set_grab(true)?;
+                        self.set_grab(true)?;
                     };
                 }
                 WindowEvent::Focused(focus) => {
                     if !focus {
-                        state.set_grab(false)?;
+                        self.set_grab(false)?;
                     }
                 }
                 _ => {}
             },
             ApplicationMessage::DeviceEvent(_, event) => {
-                if state.grab {
+                if self.grab {
                     if let DeviceEvent::MouseMotion { delta } = event {
-                        state.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
-                        state.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
-                        state.context.scene.camera.pitch = state
+                        self.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
+                        self.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
+                        self.context.scene.camera.pitch = self
                             .context
                             .scene
                             .camera
@@ -318,7 +306,7 @@ impl Application {
             }
             _ => {}
         }
-        Ok(())
+        Ok(ControlFlow::Continue)
     }
 
     fn render(&mut self) -> Result<(), Error> {

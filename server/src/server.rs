@@ -1,8 +1,4 @@
-use std::{
-    fs::read,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use std::{fs::read, net::SocketAddr, sync::Arc};
 
 use crate::{handle, Authenticator, Error, Identity, ServerMessage, State, PROTOCOLS};
 use actor::{mailbox, Actor, Address};
@@ -23,9 +19,12 @@ impl Server {
     pub fn new() -> Self {
         let authenticator = Arc::new(Authenticator::new());
         let (mailbox, address) = mailbox();
-        let state = Arc::new(Mutex::new(State {}));
-        let handler = move |message| handle(state.clone(), message);
-        spawn(Actor::new(mailbox, handler));
+        let mut state = State {};
+        let handler = move |message| handle(&mut state, message);
+        spawn(async move {
+            let mut actor = Actor::new(mailbox, handler);
+            actor.run().await;
+        });
         Self {
             endpoint: None,
             authenticator,
