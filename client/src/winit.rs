@@ -1,18 +1,8 @@
-use std::{
-    error::Error,
-    process::exit,
-    sync::{Arc, Mutex},
-};
+use std::{error::Error, process::exit, sync::Mutex};
 
-use actor::{Address, Sender};
-use log::warn;
+use actor::Address;
 use tokio::runtime::Runtime;
-use winit::{
-    dpi::PhysicalSize,
-    event::WindowEvent,
-    event_loop::{ControlFlow, EventLoopProxy},
-    window::WindowId,
-};
+use winit::{dpi::PhysicalSize, event::WindowEvent, event_loop::ControlFlow, window::WindowId};
 
 pub type EventLoop = winit::event_loop::EventLoop<Request>;
 
@@ -39,9 +29,14 @@ pub fn run<F: FnOnce(&EventLoop, Address<Request>) -> Result<Address<Event>, E>,
     factory: F,
 ) -> ! {
     let event_loop = EventLoop::with_user_event();
-    let address = Address::new(Arc::new(EventLoopSender(Mutex::new(
-        event_loop.create_proxy(),
-    ))));
+    let proxy = Mutex::new(event_loop.create_proxy());
+    let address = Address::new(move |message| {
+        proxy
+            .lock()
+            .unwrap()
+            .send_event(message)
+            .map_err(|e| e.into())
+    });
     let guard = runtime.enter();
     let address = match factory(&event_loop, address) {
         Ok(address) => address,
@@ -81,17 +76,4 @@ fn map(event: InternalEvent<'_>) -> Option<Event> {
         }));
     }
     event.to_static()?.map_nonuser_event().ok()
-}
-
-struct EventLoopSender(Mutex<EventLoopProxy<Request>>);
-
-impl Sender<Request> for EventLoopSender {
-    fn send(&self, message: Request) {
-        if let Err(error) = self.0.lock().unwrap().send_event(message) {
-            warn!(
-                "Sending failed. Event loop already closed. Error: {}",
-                error
-            );
-        }
-    }
 }

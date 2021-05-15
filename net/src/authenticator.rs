@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::Debug;
 
 use actor::Address;
 use serde::{de::DeserializeOwned, Serialize};
@@ -9,7 +10,7 @@ pub trait Authenticator: Send + Sync + 'static {
     type Token: Serialize + DeserializeOwned + Send;
     type Identity: Clone + Send + Sync;
     type Error: Error;
-    type ClientMessage: Message;
+    type ClientMessage: Message + Debug;
 
     fn authenticate(
         &self,

@@ -1,7 +1,7 @@
 use std::{
+    fmt::Debug,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::Arc,
 };
 
 use actor::{forward, mailbox, Address};
@@ -21,7 +21,7 @@ type LocalConnectResult<I, M, N> = ConnectResult<(Address<SessionMessage<I, M>>,
 pub fn local_connect<
     M,
     A: Authenticator,
-    I: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + Debug + 'static,
     F: FnOnce(Address<M>) -> Address<SessionMessage<I, A::ClientMessage>>,
 >(
     server: Address<SessionMessage<A::Identity, M>>,
@@ -31,12 +31,14 @@ pub fn local_connect<
     token: A::Token,
 ) -> LocalConnectResult<I, A::ClientMessage, M> {
     let (mailbox, client) = mailbox();
-    let client = Address::new(Arc::new(LocalSender::new(client, identity)));
+    let sender = LocalSender::new(client, identity);
+    let client = Address::new(move |message| sender.try_send(message));
     let identity = match authenticator.authenticate(client, token) {
         Ok(identity) => identity,
         Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
     };
-    let server = Address::new(Arc::new(LocalSender::new(server, identity)));
+    let sender = LocalSender::new(server, identity);
+    let server = Address::new(move |message| sender.try_send(message));
     let client = factory(server.clone());
     spawn(forward(mailbox, client.clone()));
     Ok((client, server))
@@ -74,7 +76,11 @@ pub async fn remote_connect<
         .write(token)
         .map_err(EstablishConnectionError::Serialize)?;
     writer.send(send).await?;
-    let server = Address::new(Arc::new(RemoteSender(connection)));
+    let sender = RemoteSender(connection);
+    let server = Address::new(move |message| {
+        sender.send(message);
+        Ok(())
+    });
     let client = factory(server.clone());
     spawn(session(
         bi_streams,
