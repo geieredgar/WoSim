@@ -1,4 +1,6 @@
-use actor::{Address, Sender};
+use std::error::Error;
+
+use actor::Address;
 use log::warn;
 use quinn::{Connection, VarInt};
 use tokio::spawn;
@@ -7,8 +9,8 @@ use crate::{Message, SessionMessage};
 
 pub(super) struct RemoteSender(pub(super) Connection);
 
-impl<T: Message> Sender<T> for RemoteSender {
-    fn send(&self, message: T) {
+impl RemoteSender {
+    pub(super) fn send(&self, message: impl Message) {
         let connection = self.0.clone();
         spawn(async move {
             if let Err(error) = message.send(connection) {
@@ -31,12 +33,10 @@ impl<I: Clone + 'static, M: 'static> LocalSender<I, M> {
         address.send(SessionMessage::Connect(identity.clone()));
         Self(address, identity)
     }
-}
 
-impl<I: Clone + Send + Sync + 'static, M: 'static> Sender<M> for LocalSender<I, M> {
-    fn send(&self, message: M) {
+    pub(super) fn try_send(&self, message: M) -> Result<(), Box<dyn Error>> {
         self.0
-            .send(SessionMessage::Message(self.1.clone(), message))
+            .try_send(SessionMessage::Message(self.1.clone(), message))
     }
 }
 

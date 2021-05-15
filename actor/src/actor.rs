@@ -1,43 +1,19 @@
-use std::{future::Future, marker::PhantomData, sync::Arc};
+use std::future::Future;
 
 use tokio::spawn;
 
-use crate::{Address, Mailbox, Sender};
+use crate::{Address, Mailbox};
 
-pub struct AsyncActor<H, M>
+pub fn async_actor<H, M, F>(handler: H) -> Address<M>
 where
-    H: Fn(M) + Send + Sync + 'static,
+    H: Fn(M) -> F + Sync + Send + 'static,
     M: Send + Sync + 'static,
-    H::Output: Future<Output = ()>,
+    F: Future<Output = ()> + Send + 'static,
 {
-    handler: H,
-    _phantom: PhantomData<M>,
-}
-
-impl<H, M> AsyncActor<H, M>
-where
-    H: Fn(M) + Send + Sync + 'static,
-    M: Send + Sync + 'static,
-    H::Output: Future<Output = ()>,
-{
-    pub fn address(handler: H) -> Address<M> {
-        Address::new(Arc::new(Self {
-            handler,
-            _phantom: PhantomData,
-        }))
-    }
-}
-
-impl<H, M> Sender<M> for AsyncActor<H, M>
-where
-    H: Fn(M) + Send + Sync + 'static,
-    M: Send + Sync + 'static,
-    H::Output: Future<Output = ()>,
-{
-    fn send(&self, message: M) {
-        #[allow(clippy::unit_arg)]
-        spawn((self.handler)(message));
-    }
+    Address::new(move |message| {
+        spawn(handler(message));
+        Ok(())
+    })
 }
 
 pub struct Actor<H, M>

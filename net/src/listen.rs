@@ -43,7 +43,11 @@ async fn accept<M: Message, A: Authenticator>(
         .await?
         .read()
         .map_err(EstablishConnectionError::Deserialize)?;
-    let client = Address::new(Arc::new(RemoteSender(connection.clone())));
+    let sender = RemoteSender(connection.clone());
+    let client = Address::new(move |message| {
+        sender.send(message);
+        Ok(())
+    });
     let identity = match authenticator.authenticate(client, token) {
         Ok(identity) => identity,
         Err(error) => {
