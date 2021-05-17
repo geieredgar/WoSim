@@ -4,7 +4,7 @@ use net::SessionMessage;
 
 use crate::{State, StateMessage};
 
-pub(super) fn handle(_state: &mut State, message: StateMessage) -> ControlFlow {
+pub(super) fn handle(state: &mut State, message: StateMessage) -> ControlFlow {
     match message {
         StateMessage::Session(message) => {
             match message {
@@ -21,6 +21,7 @@ pub(super) fn handle(_state: &mut State, message: StateMessage) -> ControlFlow {
             ControlFlow::Continue
         }
         StateMessage::Stop(ret) => {
+            state.database.snapshot().unwrap();
             ret.send(()).unwrap();
             ControlFlow::Stop
         }

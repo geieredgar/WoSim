@@ -1,9 +1,11 @@
-use std::{fs::read, net::SocketAddr, sync::Arc};
+use std::{fs::read, io, net::SocketAddr, path::Path, sync::Arc};
 
 use crate::{
-    handle, Authenticator, Error, Identity, ServerMessage, State, StateMessage, PROTOCOLS,
+    handle, state::World, Authenticator, Error, Identity, ServerMessage, State, StateMessage,
+    PROTOCOLS,
 };
 use actor::{mailbox, Actor, Address};
+use db::Database;
 use net::{listen, SessionMessage};
 use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
@@ -19,22 +21,28 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub fn new() -> io::Result<Self> {
         let authenticator = Arc::new(Authenticator::new());
         let (mailbox, root_address) = mailbox();
-        let mut state = State {};
+        let path = Path::new("world.db");
+        let database = if path.exists() {
+            Database::open("world.db")?
+        } else {
+            Database::create("world.db", World::new)?
+        };
+        let mut state = State { database };
         let handler = move |message| handle(&mut state, message);
         spawn(async move {
             let mut actor = Actor::new(mailbox, handler);
             actor.run().await;
         });
         let address = root_address.clone().map(StateMessage::Session);
-        Self {
+        Ok(Self {
             endpoint: None,
             authenticator,
             root_address,
             address,
-        }
+        })
     }
 
     pub fn open(&mut self, addr: &SocketAddr) -> Result<(), Error> {
@@ -70,11 +78,5 @@ impl Server {
         if let Some(endpoint) = self.endpoint.take() {
             endpoint.close(VarInt::from_u32(2), "Server closed".as_bytes());
         }
-    }
-}
-
-impl Default for Server {
-    fn default() -> Self {
-        Self::new()
     }
 }

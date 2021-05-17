@@ -38,7 +38,7 @@ fn main() -> Result<(), Error> {
             .max_ok_filter_map(DeviceCandidate::new)?
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
-        let mut server = Server::new();
+        let mut server = Server::new().unwrap();
         server.open(&"[::]:8888".parse()?)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
