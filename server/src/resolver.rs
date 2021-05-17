@@ -4,7 +4,9 @@ use actor::Address;
 use net::{local_connect, remote_connect, EstablishConnectionError, SessionMessage};
 use quinn::{Certificate, ClientConfigBuilder, Endpoint, EndpointError, TransportConfig};
 
-use crate::{ClientMessage, ServerAddress, ServerMessage, Token, PROTOCOLS};
+use crate::{
+    connection::Connection, ClientMessage, ServerAddress, ServerMessage, Token, PROTOCOLS,
+};
 
 pub struct Resolver {
     certificates: Vec<Certificate>,
@@ -26,18 +28,22 @@ impl Resolver {
         (
             Address<SessionMessage<(), ClientMessage>>,
             Address<ServerMessage>,
+            Connection,
         ),
         ResolveError,
     > {
         match server {
-            ServerAddress::Local(server) => local_connect(
-                server.address.clone(),
-                server.authenticator.as_ref(),
-                factory,
-                (),
-                token,
-            )
-            .map_err(ResolveError::EstablishConnection),
+            ServerAddress::Local(server) => {
+                let (client, server) = local_connect(
+                    server.address.clone(),
+                    server.authenticator.as_ref(),
+                    factory,
+                    (),
+                    token,
+                )
+                .map_err(ResolveError::EstablishConnection)?;
+                Ok((client, server, Connection::Local))
+            }
             ServerAddress::Remote(address) => {
                 let mut endpoint = Endpoint::builder();
                 let mut client_config = ClientConfigBuilder::default();
@@ -64,9 +70,11 @@ impl Resolver {
                     .map_err(ResolveError::IpResolve)?
                     .next()
                     .ok_or(ResolveError::NoSocketAddr)?;
-                remote_connect(&endpoint, &address, hostname, factory, (), &token)
-                    .await
-                    .map_err(ResolveError::EstablishConnection)
+                let (client, server, connection) =
+                    remote_connect(&endpoint, &address, hostname, factory, (), &token)
+                        .await
+                        .map_err(ResolveError::EstablishConnection)?;
+                Ok((client, server, Connection::Remote(connection)))
             }
         }
     }
