@@ -20,9 +20,9 @@ use debug::DebugWindows;
 use error::Error;
 use log::{error, LevelFilter, Log};
 use log::{info, Level};
-use nalgebra::{RealField, Translation3, Vector3};
+use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
-use scene::ControlState;
+use scene::{ControlState, Object, Transform};
 use server::{
     Certificate, ClientMessage, Connection, ResolveError, Resolver, ServerAddress, ServerMessage,
     SessionMessage, Token,
@@ -185,7 +185,21 @@ impl Application {
                 SessionMessage::Connect(_) => {
                     info!("Connected to server");
                 }
-                SessionMessage::Message(_, _) => {}
+                SessionMessage::Message(_, message) => match message {
+                    ClientMessage::Positions(positions) => {
+                        self.context.scene.clear();
+                        for pos in positions {
+                            self.context.scene.insert_object(Object {
+                                model: self.context.cube_model,
+                                transform: Transform {
+                                    translation: Vector3::new(pos.x, pos.y, pos.z),
+                                    scale: Vector3::new(0.3, 0.3, 0.3),
+                                    rotation: UnitQuaternion::identity(),
+                                },
+                            });
+                        }
+                    }
+                },
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
                     self.server = None;

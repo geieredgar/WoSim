@@ -95,6 +95,10 @@ impl SceneContext {
         object_index
     }
 
+    pub fn clear(&mut self) {
+        self.objects.clear();
+    }
+
     pub fn insert_mesh(&mut self, mesh: MeshData) -> Mesh {
         let vertex_offset = self.vertices.len() as i32;
         let first_index = self.vertex_indices.len() as u32;
