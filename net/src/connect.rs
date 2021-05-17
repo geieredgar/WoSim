@@ -5,7 +5,7 @@ use std::{
 };
 
 use actor::{forward, mailbox, Address};
-use quinn::{Endpoint, NewConnection};
+use quinn::{Connection, Endpoint, NewConnection};
 use serde::Serialize;
 use tokio::spawn;
 
@@ -57,7 +57,7 @@ pub async fn remote_connect<
     factory: F,
     identity: I,
     token: &T,
-) -> ConnectResult<(Address<SessionMessage<I, M>>, Address<N>)> {
+) -> ConnectResult<(Address<SessionMessage<I, M>>, Address<N>, Connection)> {
     let server_name = if IpAddr::from_str(server_name).is_err() {
         server_name
     } else {
@@ -76,7 +76,7 @@ pub async fn remote_connect<
         .write(token)
         .map_err(EstablishConnectionError::Serialize)?;
     writer.send(send).await?;
-    let sender = RemoteSender(connection);
+    let sender = RemoteSender(connection.clone());
     let server = Address::new(move |message| {
         sender.send(message);
         Ok(())
@@ -89,5 +89,5 @@ pub async fn remote_connect<
         client.clone(),
         identity,
     ));
-    Ok((client, server))
+    Ok((client, server, connection))
 }

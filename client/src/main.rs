@@ -20,11 +20,11 @@ use debug::DebugWindows;
 use error::Error;
 use log::{error, LevelFilter, Log};
 use log::{info, Level};
-use nalgebra::{RealField, Translation3, Vector3};
+use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
-use scene::ControlState;
+use scene::{ControlState, Object, Transform};
 use server::{
-    Certificate, ClientMessage, ResolveError, Resolver, ServerAddress, ServerMessage,
+    Certificate, ClientMessage, Connection, ResolveError, Resolver, ServerAddress, ServerMessage,
     SessionMessage, Token,
 };
 use tokio::{runtime::Runtime, spawn};
@@ -57,7 +57,7 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    _server: Option<Address<ServerMessage>>,
+    server: Option<(Address<ServerMessage>, Connection)>,
     resolver: Arc<Resolver>,
     windows: DebugWindows,
     winit: Address<Request>,
@@ -129,7 +129,7 @@ impl Application {
             vsync: true,
             last_update: Instant::now(),
             time: 0.0,
-            _server: None,
+            server: None,
             resolver: Arc::new(Resolver::new(certificates)),
             windows: DebugWindows::default(),
             winit,
@@ -185,15 +185,29 @@ impl Application {
                 SessionMessage::Connect(_) => {
                     info!("Connected to server");
                 }
-                SessionMessage::Message(_, _) => {}
+                SessionMessage::Message(_, message) => match message {
+                    ClientMessage::Positions(positions) => {
+                        self.context.scene.clear();
+                        for pos in positions {
+                            self.context.scene.insert_object(Object {
+                                model: self.context.cube_model,
+                                transform: Transform {
+                                    translation: Vector3::new(pos.x, pos.y, pos.z),
+                                    scale: Vector3::new(0.3, 0.3, 0.3),
+                                    rotation: UnitQuaternion::identity(),
+                                },
+                            });
+                        }
+                    }
+                },
                 SessionMessage::Disconnect(_) => {
                     info!("Disconnected from server");
-                    self._server = None;
+                    self.server = None;
                     self.context.debug.connection_status_changed(false);
                 }
             },
-            ApplicationMessage::Connected(server) => {
-                self._server = Some(server);
+            ApplicationMessage::Connected(server, connection) => {
+                self.server = Some((server, connection));
                 self.context.debug.connection_status_changed(true);
             }
             ApplicationMessage::Connect { address, username } => {
@@ -205,7 +219,7 @@ impl Application {
                 )));
             }
             ApplicationMessage::Disconnect => {
-                self._server = None;
+                self.server = None;
             }
             ApplicationMessage::Log(level, target, args) => {
                 self.context.debug.log(level, target, args);
@@ -313,7 +327,11 @@ impl Application {
         self.update();
         self.context.debug.begin_frame();
         let ctx = self.context.egui.begin();
-        self.context.debug.render(&ctx, &mut self.windows);
+        self.context.debug.render(
+            &ctx,
+            &mut self.windows,
+            self.server.as_ref().map(|(_, c)| c),
+        );
         self.context
             .egui
             .end(if self.grab { None } else { Some(&self.window) })?;
@@ -420,7 +438,7 @@ impl Drop for Application {
 #[derive(Debug)]
 pub enum ApplicationMessage {
     Client(SessionMessage<(), ClientMessage>),
-    Connected(Address<ServerMessage>),
+    Connected(Address<ServerMessage>, Connection),
     Render,
     Connect { address: String, username: String },
     Disconnect,
@@ -468,10 +486,10 @@ async fn connect_to_server(
     name: String,
 ) -> Result<(), ResolveError> {
     let client = application.clone().map(ApplicationMessage::Client);
-    let (_, server) = resolver
+    let (_, server, connection) = resolver
         .resolve(|_| client, ServerAddress::Remote(address), Token { name })
         .await?;
-    application.send(ApplicationMessage::Connected(server));
+    application.send(ApplicationMessage::Connected(server, connection));
     Ok(())
 }
 

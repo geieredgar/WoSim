@@ -13,13 +13,15 @@ impl From<Bytes> for Reader {
     }
 }
 
+pub type ReadError = Error;
+
 impl Reader {
     pub async fn recv(recv: RecvStream, size_limit: usize) -> Result<Self, ReadToEndError> {
         let bytes: Bytes = recv.read_to_end(size_limit).await?.into();
         Ok(bytes.into())
     }
 
-    pub fn read<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+    pub fn read<T: DeserializeOwned>(&mut self) -> Result<T, ReadError> {
         deserialize_from(&mut self.0)
     }
 }

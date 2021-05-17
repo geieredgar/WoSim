@@ -20,6 +20,7 @@ pub struct Context {
     pub cull: CullContext,
     pub depth: DepthContext,
     pub scene: SceneContext,
+    pub cube_model: u32,
     pub pipeline_cache: PipelineCache,
     pub configuration: RenderConfiguration,
     pub egui: EguiContext,
@@ -88,7 +89,7 @@ impl Context {
             ],
         };
         let cube_mesh = scene.insert_mesh(cube);
-        let model = scene.insert_model(Model {
+        let cube_model = scene.insert_model(Model {
             bounds: Sphere {
                 center: Vector3::new(1.0, 1.0, 1.0),
                 radius: 3f32.sqrt(),
@@ -99,7 +100,7 @@ impl Context {
             for y in -20..21 {
                 for z in -20..21 {
                     scene.insert_object(Object {
-                        model,
+                        model: cube_model,
                         transform: Transform {
                             translation: Vector3::new(
                                 x as f32 * 3.0,
@@ -130,6 +131,7 @@ impl Context {
             cull,
             depth,
             scene,
+            cube_model,
             pipeline_cache,
             configuration,
             egui,

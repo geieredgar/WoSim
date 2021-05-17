@@ -12,6 +12,7 @@ use egui::{
     Align, Color32, CtxRef, DragValue, RadioButton, ScrollArea, Window,
 };
 use log::{set_max_level, Level, LevelFilter};
+use server::Connection;
 
 use crate::{renderer::RenderTimestamps, ApplicationMessage};
 
@@ -121,12 +122,20 @@ impl DebugContext {
         });
     }
 
-    fn render_information(&mut self, ctx: &CtxRef, open: &mut bool) {
+    fn render_information(
+        &mut self,
+        ctx: &CtxRef,
+        open: &mut bool,
+        connection: Option<&Connection>,
+    ) {
         Window::new("Information").open(open).show(ctx, |ui| {
             ui.label(format!(
                 "FPS: {} Frame Count: {}",
                 self.frames_per_second, self.frame_count
             ));
+            if let Some(connection) = connection {
+                ui.label(format!("RTT: {}", connection.rtt().as_millis()));
+            }
         });
     }
 
@@ -272,9 +281,14 @@ impl DebugContext {
         });
     }
 
-    pub fn render(&mut self, ctx: &CtxRef, windows: &mut DebugWindows) {
+    pub fn render(
+        &mut self,
+        ctx: &CtxRef,
+        windows: &mut DebugWindows,
+        connection: Option<&Connection>,
+    ) {
         self.render_configuration(ctx, &mut windows.configuration);
-        self.render_information(ctx, &mut windows.information);
+        self.render_information(ctx, &mut windows.information, connection);
         self.render_frame_times(ctx, &mut windows.frame_times);
         self.render_log(ctx, &mut windows.log);
     }

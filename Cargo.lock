@@ -2150,6 +2150,7 @@ dependencies = [
 name = "wosim-server"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "ctrlc",
  "env_logger",
  "log",
@@ -2158,6 +2159,7 @@ dependencies = [
  "tokio",
  "webpki",
  "wosim-actor",
+ "wosim-db",
  "wosim-net",
  "wosim-util",
  "wosim-vulkan",
