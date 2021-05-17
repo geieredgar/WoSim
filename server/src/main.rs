@@ -39,7 +39,7 @@ fn main() -> Result<(), Error> {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let mut server = Server::new();
-        server.open(&"0.0.0.0:8888".parse()?)?;
+        server.open(&"[::]:8888".parse()?)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }
