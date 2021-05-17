@@ -1,10 +1,19 @@
 use std::fmt::Display;
 
-use net::{FromBiStream, FromDatagram, FromUniStream, Message};
+use net::{FromBiStream, FromDatagram, FromUniStream, Message, SessionMessage};
 use quinn::SendStream;
+use tokio::sync::oneshot;
+
+use crate::Identity;
 
 #[derive(Debug)]
 pub struct ServerMessage;
+
+#[derive(Debug)]
+pub(crate) enum StateMessage {
+    Session(SessionMessage<Identity, ServerMessage>),
+    Stop(oneshot::Sender<()>),
+}
 
 impl FromDatagram for ServerMessage {
     type Error = MessageError;

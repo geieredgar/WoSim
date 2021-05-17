@@ -2,22 +2,27 @@ use actor::ControlFlow;
 use log::info;
 use net::SessionMessage;
 
-use crate::{Identity, ServerMessage, State};
+use crate::{State, StateMessage};
 
-pub(super) fn handle(
-    _state: &mut State,
-    message: SessionMessage<Identity, ServerMessage>,
-) -> ControlFlow {
+pub(super) fn handle(_state: &mut State, message: StateMessage) -> ControlFlow {
     match message {
-        SessionMessage::Connect(identity) => {
-            info!("Client {} connected", identity.name)
+        StateMessage::Session(message) => {
+            match message {
+                SessionMessage::Connect(identity) => {
+                    info!("Client {} connected", identity.name);
+                }
+                SessionMessage::Disconnect(identity) => {
+                    info!("Client {} disconnected", identity.name)
+                }
+                SessionMessage::Message(identity, _) => {
+                    info!("Message from client {}", identity.name)
+                }
+            }
+            ControlFlow::Continue
         }
-        SessionMessage::Disconnect(identity) => {
-            info!("Client {} disconnected", identity.name)
-        }
-        SessionMessage::Message(identity, _) => {
-            info!("Message from client {}", identity.name)
+        StateMessage::Stop(ret) => {
+            ret.send(()).unwrap();
+            ControlFlow::Stop
         }
     }
-    ControlFlow::Continue
 }

@@ -43,6 +43,7 @@ fn main() -> Result<(), Error> {
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }
+        server.stop().await;
         Ok(())
     })
 }
