@@ -22,6 +22,7 @@ pub use message::*;
 pub use resolver::*;
 pub use server::*;
 pub(self) use state::State;
+pub(self) use state::World;
 pub use token::*;
 
 pub use net::SessionMessage;
