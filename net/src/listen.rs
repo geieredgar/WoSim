@@ -7,26 +7,19 @@ use futures::StreamExt;
 use quinn::{Connecting, Incoming, NewConnection, VarInt};
 use tokio::spawn;
 
-use crate::{
-    session, Authenticator, EstablishConnectionError, Message, Reader, RemoteSender, SessionMessage,
-};
+use crate::{session, Authenticator, EstablishConnectionError, Reader, RemoteSender};
 
-pub fn listen<M: Message, A: Authenticator>(
-    mut incoming: Incoming,
-    authenticator: Arc<A>,
-    receiver: Address<SessionMessage<A::Identity, M>>,
-) {
+pub fn listen<A: Authenticator>(mut incoming: Incoming, authenticator: Arc<A>) {
     spawn(async move {
         while let Some(connecting) = incoming.next().await {
-            spawn(accept(connecting, authenticator.clone(), receiver.clone()));
+            spawn(accept(connecting, authenticator.clone()));
         }
     });
 }
 
-async fn accept<M: Message, A: Authenticator>(
+async fn accept<A: Authenticator>(
     connecting: Connecting,
     authenticator: Arc<A>,
-    receiver: Address<SessionMessage<A::Identity, M>>,
 ) -> Result<(), EstablishConnectionError> {
     let NewConnection {
         connection,
@@ -48,14 +41,14 @@ async fn accept<M: Message, A: Authenticator>(
         sender.send(message);
         Ok(())
     });
-    let identity = match authenticator.authenticate(client, token) {
-        Ok(identity) => identity,
+    let receiver = match authenticator.authenticate(client, token) {
+        Ok(receiver) => receiver,
         Err(error) => {
             let reason = error.to_string();
             connection.close(VarInt::from_u32(1), reason.as_bytes());
             return Err(EstablishConnectionError::TokenRejected(reason));
         }
     };
-    session(bi_streams, uni_streams, datagrams, receiver, identity).await;
+    session(bi_streams, uni_streams, datagrams, receiver).await;
     Ok(())
 }

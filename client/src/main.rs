@@ -13,7 +13,7 @@ use ::winit::{
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
     window::{Fullscreen, Window, WindowBuilder},
 };
-use actor::{mailbox, Actor, Address, ControlFlow};
+use actor::{mailbox, Address, ControlFlow};
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
@@ -137,17 +137,19 @@ impl Application {
     }
 
     fn spawn(event_loop: &EventLoop, winit: Address<Request>) -> Result<Address<Event>, Error> {
-        let (mailbox, address) = mailbox();
+        let (mut mailbox, address) = mailbox();
         let mut application = Self::new(event_loop, winit, address.clone())?;
         spawn(async move {
-            let mut actor = Actor::new(mailbox, move |message| match application.handle(message) {
-                Ok(flow) => flow,
-                Err(error) => {
-                    error!("Task failed: {:?}", error);
-                    ControlFlow::Stop
+            while let Some(message) = mailbox.recv().await {
+                match application.handle(message) {
+                    Ok(ControlFlow::Continue) => {}
+                    Ok(ControlFlow::Stop) => return,
+                    Err(error) => {
+                        error!("Task failed: {:?}", error);
+                        return;
+                    }
                 }
-            });
-            actor.run().await
+            }
         });
         Ok(address.filter_map(|event| match event {
             Event::WindowEvent { event, .. } => match event {
@@ -487,7 +489,19 @@ async fn connect_to_server(
 ) -> Result<(), ResolveError> {
     let client = application.clone().map(ApplicationMessage::Client);
     let (_, server, connection) = resolver
-        .resolve(|_| client, ServerAddress::Remote(address), Token { name })
+        .resolve(
+            |_, mut mailbox| {
+                spawn(async move {
+                    client.send(SessionMessage::Connect(()));
+                    while let Some(message) = mailbox.recv().await {
+                        client.send(SessionMessage::Message((), message));
+                    }
+                    client.send(SessionMessage::Disconnect(()))
+                });
+            },
+            ServerAddress::Remote(address),
+            Token { name },
+        )
         .await?;
     application.send(ApplicationMessage::Connected(server, connection));
     Ok(())

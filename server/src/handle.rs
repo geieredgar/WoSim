@@ -4,7 +4,7 @@ use net::SessionMessage;
 
 use crate::{ClientMessage, State, StateMessage, World};
 
-pub(super) fn handle(state: &mut State, message: StateMessage) -> ControlFlow {
+pub(super) async fn handle(state: &mut State, message: StateMessage) -> ControlFlow {
     match message {
         StateMessage::Session(message) => {
             match message {

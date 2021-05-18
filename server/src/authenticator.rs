@@ -1,32 +1,48 @@
 use std::{error::Error, fmt::Display};
 
-use crate::{ClientMessage, Identity, Token};
+use actor::{mailbox, Address};
+use net::SessionMessage;
+use tokio::spawn;
 
-#[derive(Default)]
-pub(super) struct Authenticator {}
+use crate::{ClientMessage, Identity, ServerMessage, Token};
+
+pub(super) struct Authenticator {
+    server: Address<SessionMessage<Identity, ServerMessage>>,
+}
 
 impl Authenticator {
-    pub(super) fn new() -> Self {
-        Self {}
+    pub(super) fn new(server: Address<SessionMessage<Identity, ServerMessage>>) -> Self {
+        Self { server }
     }
 }
 
 impl net::Authenticator for Authenticator {
     type Token = Token;
-    type Identity = Identity;
-    type Error = AuthenticationError;
-
     type ClientMessage = ClientMessage;
+    type ServerMessage = ServerMessage;
+    type Error = AuthenticationError;
 
     fn authenticate(
         &self,
         client: actor::Address<Self::ClientMessage>,
         token: Self::Token,
-    ) -> Result<Self::Identity, Self::Error> {
-        Ok(Identity {
+    ) -> Result<actor::Address<Self::ServerMessage>, Self::Error> {
+        let (mut mailbox, address) = mailbox();
+        let identity = Identity {
             name: token.name,
             address: client,
-        })
+        };
+        let server = self.server.clone();
+        spawn(async move {
+            server.send(SessionMessage::Connect(identity.clone()));
+            {
+                while let Some(message) = mailbox.recv().await {
+                    server.send(SessionMessage::Message(identity.clone(), message));
+                }
+            }
+            server.send(SessionMessage::Disconnect(identity));
+        });
+        Ok(address)
     }
 
     fn token_size_limit() -> usize {

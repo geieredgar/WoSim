@@ -1,7 +1,7 @@
 use std::{io, net::ToSocketAddrs, sync::Arc, time::Duration};
 
-use actor::Address;
-use net::{local_connect, remote_connect, EstablishConnectionError, SessionMessage};
+use actor::{Address, Mailbox};
+use net::{local_connect, remote_connect, EstablishConnectionError};
 use quinn::{Certificate, ClientConfigBuilder, Endpoint, EndpointError, TransportConfig};
 
 use crate::{
@@ -17,31 +17,16 @@ impl Resolver {
         Self { certificates }
     }
 
-    pub async fn resolve<
-        F: FnOnce(Address<ServerMessage>) -> Address<SessionMessage<(), ClientMessage>>,
-    >(
+    pub async fn resolve<F: FnOnce(Address<ServerMessage>, Mailbox<ClientMessage>)>(
         &self,
         factory: F,
         server: ServerAddress<'_>,
         token: Token,
-    ) -> Result<
-        (
-            Address<SessionMessage<(), ClientMessage>>,
-            Address<ServerMessage>,
-            Connection,
-        ),
-        ResolveError,
-    > {
+    ) -> Result<(Address<ClientMessage>, Address<ServerMessage>, Connection), ResolveError> {
         match server {
             ServerAddress::Local(server) => {
-                let (client, server) = local_connect(
-                    server.address.clone(),
-                    server.authenticator.as_ref(),
-                    factory,
-                    (),
-                    token,
-                )
-                .map_err(ResolveError::EstablishConnection)?;
+                let (client, server) = local_connect(server.authenticator.as_ref(), factory, token)
+                    .map_err(ResolveError::EstablishConnection)?;
                 Ok((client, server, Connection::Local))
             }
             ServerAddress::Remote(address) => {
@@ -71,7 +56,7 @@ impl Resolver {
                     .next()
                     .ok_or(ResolveError::NoSocketAddr)?;
                 let (client, server, connection) =
-                    remote_connect(&endpoint, &address, hostname, factory, (), &token)
+                    remote_connect(&endpoint, &address, hostname, factory, &token)
                         .await
                         .map_err(ResolveError::EstablishConnection)?;
                 Ok((client, server, Connection::Remote(connection)))

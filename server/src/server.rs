@@ -1,12 +1,9 @@
 use std::{fs::read, io, net::SocketAddr, path::Path, sync::Arc};
 
-use crate::{
-    handle, state::World, Authenticator, Error, Identity, ServerMessage, State, StateMessage,
-    PROTOCOLS,
-};
-use actor::{mailbox, Actor, Address};
+use crate::{handle, state::World, Authenticator, Error, State, StateMessage, PROTOCOLS};
+use actor::{mailbox, Address, ControlFlow};
 use db::Database;
-use net::{listen, SessionMessage};
+use net::listen;
 use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
     TransportConfig, VarInt,
@@ -17,31 +14,31 @@ pub struct Server {
     endpoint: Option<Endpoint>,
     pub(super) authenticator: Arc<Authenticator>,
     root_address: Address<StateMessage>,
-    pub(super) address: Address<SessionMessage<Identity, ServerMessage>>,
 }
 
 impl Server {
     pub fn new() -> io::Result<Self> {
-        let authenticator = Arc::new(Authenticator::new());
-        let (mailbox, root_address) = mailbox();
+        let (mut mailbox, root_address) = mailbox();
         let path = Path::new("world.db");
         let database = if path.exists() {
             Database::open("world.db")?
         } else {
             Database::create("world.db", World::new)?
         };
-        let mut state = State { database };
-        let handler = move |message| handle(&mut state, message);
         spawn(async move {
-            let mut actor = Actor::new(mailbox, handler);
-            actor.run().await;
+            let mut state = State { database };
+            while let Some(message) = mailbox.recv().await {
+                if let ControlFlow::Stop = handle(&mut state, message).await {
+                    return;
+                }
+            }
         });
         let address = root_address.clone().map(StateMessage::Session);
+        let authenticator = Arc::new(Authenticator::new(address));
         Ok(Self {
             endpoint: None,
             authenticator,
             root_address,
-            address,
         })
     }
 
@@ -62,7 +59,7 @@ impl Server {
         let mut endpoint = Endpoint::builder();
         endpoint.listen(server_config);
         let (endpoint, incoming) = endpoint.bind(&addr)?;
-        listen(incoming, self.authenticator.clone(), self.address.clone());
+        listen(incoming, self.authenticator.clone());
         self.endpoint = Some(endpoint);
         Ok(())
     }

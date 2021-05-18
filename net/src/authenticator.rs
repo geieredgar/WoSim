@@ -8,15 +8,15 @@ use crate::Message;
 
 pub trait Authenticator: Send + Sync + 'static {
     type Token: Serialize + DeserializeOwned + Send;
-    type Identity: Clone + Send + Sync;
     type Error: Error;
     type ClientMessage: Message + Debug;
+    type ServerMessage: Message + Debug;
 
     fn authenticate(
         &self,
         client: Address<Self::ClientMessage>,
         token: Self::Token,
-    ) -> Result<Self::Identity, Self::Error>;
+    ) -> Result<Address<Self::ServerMessage>, Self::Error>;
 
     fn token_size_limit() -> usize;
 }
