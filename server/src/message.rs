@@ -1,21 +1,23 @@
 use std::fmt::Display;
 
-use net::{FromBiStream, FromDatagram, FromUniStream, Message, ReadError, SessionMessage, Writer};
+use net::{FromBiStream, FromDatagram, FromUniStream, Message, ReadError, Writer};
 use quinn::SendStream;
 use tokio::{spawn, sync::oneshot};
 
 use crate::{state::Position, Identity};
 
 #[derive(Debug)]
-pub struct ServerMessage;
+pub struct Request;
 
 #[derive(Debug)]
-pub(crate) enum StateMessage {
-    Session(SessionMessage<Identity, ServerMessage>),
+pub(crate) enum ServerMessage {
+    Connected(Identity),
+    Disconnected(Identity),
+    Request(Identity, Request),
     Stop(oneshot::Sender<()>),
 }
 
-impl FromDatagram for ServerMessage {
+impl FromDatagram for Request {
     type Error = MessageError;
 
     fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
@@ -23,7 +25,7 @@ impl FromDatagram for ServerMessage {
     }
 }
 
-impl FromUniStream for ServerMessage {
+impl FromUniStream for Request {
     type Error = MessageError;
 
     fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
@@ -35,7 +37,7 @@ impl FromUniStream for ServerMessage {
     }
 }
 
-impl FromBiStream for ServerMessage {
+impl FromBiStream for Request {
     type Error = MessageError;
 
     fn from(_reader: net::Reader, _send: SendStream) -> Result<Self, Self::Error> {
@@ -47,7 +49,7 @@ impl FromBiStream for ServerMessage {
     }
 }
 
-impl Message for ServerMessage {
+impl Message for Request {
     type Error = MessageError;
 
     fn send(self, _connection: quinn::Connection) -> Result<(), MessageError> {
@@ -56,11 +58,11 @@ impl Message for ServerMessage {
 }
 
 #[derive(Debug)]
-pub enum ClientMessage {
+pub enum Push {
     Positions(Vec<Position>),
 }
 
-impl FromDatagram for ClientMessage {
+impl FromDatagram for Push {
     type Error = MessageError;
 
     fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
@@ -68,7 +70,7 @@ impl FromDatagram for ClientMessage {
     }
 }
 
-impl FromUniStream for ClientMessage {
+impl FromUniStream for Push {
     type Error = MessageError;
 
     fn from(mut reader: net::Reader) -> Result<Self, Self::Error> {
@@ -81,7 +83,7 @@ impl FromUniStream for ClientMessage {
     }
 }
 
-impl FromBiStream for ClientMessage {
+impl FromBiStream for Push {
     type Error = MessageError;
 
     fn from(_reader: net::Reader, _send: SendStream) -> Result<Self, Self::Error> {
@@ -93,12 +95,12 @@ impl FromBiStream for ClientMessage {
     }
 }
 
-impl Message for ClientMessage {
+impl Message for Push {
     type Error = MessageError;
 
     fn send(self, connection: quinn::Connection) -> Result<(), MessageError> {
         match self {
-            ClientMessage::Positions(positions) => spawn(async move {
+            Push::Positions(positions) => spawn(async move {
                 let send = connection.open_uni().await.unwrap();
                 let mut writer = Writer::new();
                 writer.write(&positions).unwrap();

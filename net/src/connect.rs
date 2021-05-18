@@ -2,62 +2,52 @@ use std::{
     fmt::Debug,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    time::Duration,
 };
 
-use actor::{forward, mailbox, Address};
-use quinn::{Connection, Endpoint, NewConnection};
+use actor::{mailbox, Address, Mailbox};
+use quinn::{Endpoint, NewConnection};
 use serde::Serialize;
 use tokio::spawn;
 
-use crate::{
-    sender::{LocalSender, RemoteSender},
-    session, Authenticator, EstablishConnectionError, Message, SessionMessage, Writer,
-};
+use crate::{sender::RemoteSender, session, EstablishConnectionError, Message, Server, Writer};
 
-type ConnectResult<T> = Result<T, EstablishConnectionError>;
-
-type LocalConnectResult<I, M, N> = ConnectResult<(Address<SessionMessage<I, M>>, Address<N>)>;
-
-pub fn local_connect<
-    M,
-    A: Authenticator,
-    I: Clone + Send + Sync + Debug + 'static,
-    F: FnOnce(Address<M>) -> Address<SessionMessage<I, A::ClientMessage>>,
->(
-    server: Address<SessionMessage<A::Identity, M>>,
-    authenticator: &A,
-    factory: F,
-    identity: I,
-    token: A::Token,
-) -> LocalConnectResult<I, A::ClientMessage, M> {
-    let (mailbox, client) = mailbox();
-    let sender = LocalSender::new(client, identity);
-    let client = Address::new(move |message| sender.try_send(message));
-    let identity = match authenticator.authenticate(client, token) {
-        Ok(identity) => identity,
-        Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
-    };
-    let sender = LocalSender::new(server, identity);
-    let server = Address::new(move |message| sender.try_send(message));
-    let client = factory(server.clone());
-    spawn(forward(mailbox, client.clone()));
-    Ok((client, server))
+#[derive(Debug)]
+pub enum Connection {
+    Local,
+    Remote(quinn::Connection),
 }
 
-pub async fn remote_connect<
-    M: Message,
-    N: Message,
-    T: Serialize,
-    I: Clone + 'static + Send + Sync,
-    F: FnOnce(Address<N>) -> Address<SessionMessage<I, M>>,
->(
+pub type ConnectResult<R, P> =
+    Result<(Address<R>, Mailbox<P>, Connection), EstablishConnectionError>;
+
+impl Connection {
+    pub fn rtt(&self) -> Duration {
+        match self {
+            Connection::Local => Duration::from_secs(0),
+            Connection::Remote(connection) => connection.rtt(),
+        }
+    }
+}
+
+pub fn local_connect<S: Server>(
+    server: &S,
+    token: S::AuthToken,
+) -> ConnectResult<S::Request, S::Push> {
+    let (mailbox, client) = mailbox();
+    let server = match server.authenticate(client, token) {
+        Ok(server) => server,
+        Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
+    };
+    Ok((server, mailbox, Connection::Local))
+}
+
+pub async fn remote_connect<R: Message + Debug, P: Message + Debug, T: Serialize>(
     endpoint: &Endpoint,
     addr: &SocketAddr,
     server_name: &str,
-    factory: F,
-    identity: I,
     token: &T,
-) -> ConnectResult<(Address<SessionMessage<I, M>>, Address<N>, Connection)> {
+) -> ConnectResult<R, P> {
     let server_name = if IpAddr::from_str(server_name).is_err() {
         server_name
     } else {
@@ -81,13 +71,7 @@ pub async fn remote_connect<
         sender.send(message);
         Ok(())
     });
-    let client = factory(server.clone());
-    spawn(session(
-        bi_streams,
-        uni_streams,
-        datagrams,
-        client.clone(),
-        identity,
-    ));
-    Ok((client, server, connection))
+    let (mailbox, client) = mailbox();
+    spawn(session(bi_streams, uni_streams, datagrams, client));
+    Ok((server, mailbox, Connection::Remote(connection)))
 }

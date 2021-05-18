@@ -116,7 +116,7 @@ impl DebugContext {
                         });
                     }
                 } else if ui.button("Disconnect").clicked() {
-                    self.address.send(ApplicationMessage::Disconnect);
+                    self.address.send(ApplicationMessage::Disconnected);
                 }
             });
         });

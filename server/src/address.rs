@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use crate::Server;
 
-pub enum ServerAddress<'a> {
-    Local(&'a Server),
+pub enum ServerAddress {
+    Local(Arc<Server>),
     Remote(String),
 }

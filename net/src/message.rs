@@ -11,10 +11,3 @@ pub trait Message:
 
     fn send(self, connection: Connection) -> Result<(), <Self as Message>::Error>;
 }
-
-#[derive(Debug)]
-pub enum SessionMessage<I, M> {
-    Connect(I),
-    Message(I, M),
-    Disconnect(I),
-}

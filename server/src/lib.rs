@@ -1,6 +1,4 @@
 mod address;
-mod authenticator;
-mod connection;
 mod error;
 mod handle;
 mod identity;
@@ -13,8 +11,6 @@ mod vulkan;
 
 pub use crate::vulkan::*;
 pub use address::*;
-pub use authenticator::*;
-pub use connection::*;
 pub use error::*;
 pub(self) use handle::handle;
 pub(self) use identity::Identity;
@@ -25,7 +21,7 @@ pub(self) use state::State;
 pub(self) use state::World;
 pub use token::*;
 
-pub use net::SessionMessage;
+pub use net::Connection;
 pub use quinn::Certificate;
 
 pub const PROTOCOLS: &[&[u8]] = &[b"wosim/0.1"];
