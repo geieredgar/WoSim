@@ -437,7 +437,6 @@ pub enum ApplicationMessage {
     Connected(Address<Request>, Connection),
     Render,
     Connect { address: String, username: String },
-    Disconnect,
     Disconnected,
     Log(Level, String, String),
     ScaleFactorChanged(f64, PhysicalSize<u32>),
