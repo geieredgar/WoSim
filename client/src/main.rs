@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use crate::winit::{run, Event, EventLoop, Request, UserEvent};
+use crate::winit::{run, Event, EventLoop, UserEvent};
 use ::vulkan::{
     ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
 };
@@ -24,8 +24,7 @@ use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::{ControlState, Object, Transform};
 use server::{
-    Certificate, ClientMessage, Connection, ResolveError, Resolver, ServerAddress, ServerMessage,
-    SessionMessage, Token,
+    Certificate, Connection, Push, Request, ResolveError, Resolver, ServerAddress, Token,
 };
 use tokio::{runtime::Runtime, spawn};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -57,16 +56,16 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    server: Option<(Address<ServerMessage>, Connection)>,
+    server: Option<(Address<Request>, Connection)>,
     resolver: Arc<Resolver>,
     windows: DebugWindows,
-    winit: Address<Request>,
+    winit: Address<crate::winit::Request>,
 }
 
 impl Application {
     fn new(
         event_loop: &EventLoop,
-        winit: Address<Request>,
+        winit: Address<crate::winit::Request>,
         address: Address<ApplicationMessage>,
     ) -> Result<Self, Error> {
         log::set_boxed_logger(Box::new(ApplicationLogger {
@@ -136,7 +135,10 @@ impl Application {
         })
     }
 
-    fn spawn(event_loop: &EventLoop, winit: Address<Request>) -> Result<Address<Event>, Error> {
+    fn spawn(
+        event_loop: &EventLoop,
+        winit: Address<crate::winit::Request>,
+    ) -> Result<Address<Event>, Error> {
         let (mut mailbox, address) = mailbox();
         let mut application = Self::new(event_loop, winit, address.clone())?;
         spawn(async move {
@@ -173,7 +175,7 @@ impl Application {
 
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
         if let ApplicationMessage::ExitRequested = message {
-            self.winit.send(Request::Exit);
+            self.winit.send(crate::winit::Request::Exit);
             return Ok(ControlFlow::Stop);
         }
         if self.handle_early_mouse_grab(&message).is_handled() {
@@ -183,29 +185,19 @@ impl Application {
             return Ok(ControlFlow::Continue);
         }
         match message {
-            ApplicationMessage::Client(message) => match message {
-                SessionMessage::Connect(_) => {
-                    info!("Connected to server");
-                }
-                SessionMessage::Message(_, message) => match message {
-                    ClientMessage::Positions(positions) => {
-                        self.context.scene.clear();
-                        for pos in positions {
-                            self.context.scene.insert_object(Object {
-                                model: self.context.cube_model,
-                                transform: Transform {
-                                    translation: Vector3::new(pos.x, pos.y, pos.z),
-                                    scale: Vector3::new(0.3, 0.3, 0.3),
-                                    rotation: UnitQuaternion::identity(),
-                                },
-                            });
-                        }
+            ApplicationMessage::Push(push) => match push {
+                Push::Positions(positions) => {
+                    self.context.scene.clear();
+                    for pos in positions {
+                        self.context.scene.insert_object(Object {
+                            model: self.context.cube_model,
+                            transform: Transform {
+                                translation: Vector3::new(pos.x, pos.y, pos.z),
+                                scale: Vector3::new(0.3, 0.3, 0.3),
+                                rotation: UnitQuaternion::identity(),
+                            },
+                        });
                     }
-                },
-                SessionMessage::Disconnect(_) => {
-                    info!("Disconnected from server");
-                    self.server = None;
-                    self.context.debug.connection_status_changed(false);
                 }
             },
             ApplicationMessage::Connected(server, connection) => {
@@ -220,8 +212,10 @@ impl Application {
                     username,
                 )));
             }
-            ApplicationMessage::Disconnect => {
+            ApplicationMessage::Disconnected => {
+                info!("Disconnected from server");
                 self.server = None;
+                self.context.debug.connection_status_changed(false);
             }
             ApplicationMessage::Log(level, target, args) => {
                 self.context.debug.log(level, target, args);
@@ -439,11 +433,12 @@ impl Drop for Application {
 
 #[derive(Debug)]
 pub enum ApplicationMessage {
-    Client(SessionMessage<(), ClientMessage>),
-    Connected(Address<ServerMessage>, Connection),
+    Push(Push),
+    Connected(Address<Request>, Connection),
     Render,
     Connect { address: String, username: String },
     Disconnect,
+    Disconnected,
     Log(Level, String, String),
     ScaleFactorChanged(f64, PhysicalSize<u32>),
     ExitRequested,
@@ -487,23 +482,14 @@ async fn connect_to_server(
     address: String,
     name: String,
 ) -> Result<(), ResolveError> {
-    let client = application.clone().map(ApplicationMessage::Client);
-    let (_, server, connection) = resolver
-        .resolve(
-            |_, mut mailbox| {
-                spawn(async move {
-                    client.send(SessionMessage::Connect(()));
-                    while let Some(message) = mailbox.recv().await {
-                        client.send(SessionMessage::Message((), message));
-                    }
-                    client.send(SessionMessage::Disconnect(()))
-                });
-            },
-            ServerAddress::Remote(address),
-            Token { name },
-        )
+    let (server, mut mailbox, connection) = resolver
+        .resolve(ServerAddress::Remote(address), Token { name })
         .await?;
     application.send(ApplicationMessage::Connected(server, connection));
+    while let Some(message) = mailbox.recv().await {
+        application.send(ApplicationMessage::Push(message));
+    }
+    application.send(ApplicationMessage::Disconnected);
     Ok(())
 }
 

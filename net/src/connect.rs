@@ -2,50 +2,52 @@ use std::{
     fmt::Debug,
     net::{IpAddr, SocketAddr},
     str::FromStr,
+    time::Duration,
 };
 
 use actor::{mailbox, Address, Mailbox};
-use quinn::{Connection, Endpoint, NewConnection};
+use quinn::{Endpoint, NewConnection};
 use serde::Serialize;
 use tokio::spawn;
 
-use crate::{
-    sender::RemoteSender, session, Authenticator, EstablishConnectionError, Message, Writer,
-};
+use crate::{sender::RemoteSender, session, EstablishConnectionError, Message, Server, Writer};
 
-type ConnectResult<T> = Result<T, EstablishConnectionError>;
+#[derive(Debug)]
+pub enum Connection {
+    Local,
+    Remote(quinn::Connection),
+}
 
-type LocalConnectResult<M, N> = ConnectResult<(Address<M>, Address<N>)>;
+pub type ConnectResult<R, P> =
+    Result<(Address<R>, Mailbox<P>, Connection), EstablishConnectionError>;
 
-pub fn local_connect<
-    A: Authenticator,
-    F: FnOnce(Address<A::ServerMessage>, Mailbox<A::ClientMessage>),
->(
-    authenticator: &A,
-    factory: F,
-    token: A::Token,
-) -> LocalConnectResult<A::ClientMessage, A::ServerMessage> {
+impl Connection {
+    pub fn rtt(&self) -> Duration {
+        match self {
+            Connection::Local => Duration::from_secs(0),
+            Connection::Remote(connection) => connection.rtt(),
+        }
+    }
+}
+
+pub fn local_connect<S: Server>(
+    server: &S,
+    token: S::AuthToken,
+) -> ConnectResult<S::Request, S::Push> {
     let (mailbox, client) = mailbox();
-    let server = match authenticator.authenticate(client.clone(), token) {
+    let server = match server.authenticate(client, token) {
         Ok(server) => server,
         Err(error) => return Err(EstablishConnectionError::TokenRejected(error.to_string())),
     };
-    factory(server.clone(), mailbox);
-    Ok((client, server))
+    Ok((server, mailbox, Connection::Local))
 }
 
-pub async fn remote_connect<
-    M: Message + Debug,
-    N: Message + Debug,
-    T: Serialize,
-    F: FnOnce(Address<N>, Mailbox<M>),
->(
+pub async fn remote_connect<R: Message + Debug, P: Message + Debug, T: Serialize>(
     endpoint: &Endpoint,
     addr: &SocketAddr,
     server_name: &str,
-    factory: F,
     token: &T,
-) -> ConnectResult<(Address<M>, Address<N>, Connection)> {
+) -> ConnectResult<R, P> {
     let server_name = if IpAddr::from_str(server_name).is_err() {
         server_name
     } else {
@@ -70,7 +72,6 @@ pub async fn remote_connect<
         Ok(())
     });
     let (mailbox, client) = mailbox();
-    spawn(session(bi_streams, uni_streams, datagrams, client.clone()));
-    factory(server.clone(), mailbox);
-    Ok((client, server, connection))
+    spawn(session(bi_streams, uni_streams, datagrams, client));
+    Ok((server, mailbox, Connection::Remote(connection)))
 }

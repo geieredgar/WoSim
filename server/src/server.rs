@@ -1,6 +1,16 @@
-use std::{fs::read, io, net::SocketAddr, path::Path, sync::Arc};
+use std::{
+    error::Error,
+    fmt::Display,
+    fs::read,
+    io,
+    net::SocketAddr,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
-use crate::{handle, state::World, Authenticator, Error, State, StateMessage, PROTOCOLS};
+use crate::{
+    handle, state::World, Identity, Push, Request, ServerMessage, State, Token, PROTOCOLS,
+};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
 use net::listen;
@@ -11,14 +21,13 @@ use quinn::{
 use tokio::{spawn, sync::oneshot};
 
 pub struct Server {
-    endpoint: Option<Endpoint>,
-    pub(super) authenticator: Arc<Authenticator>,
-    root_address: Address<StateMessage>,
+    endpoint: Mutex<Option<Endpoint>>,
+    address: Address<ServerMessage>,
 }
 
 impl Server {
-    pub fn new() -> io::Result<Self> {
-        let (mut mailbox, root_address) = mailbox();
+    pub fn new() -> io::Result<Arc<Self>> {
+        let (mut mailbox, address) = mailbox();
         let path = Path::new("world.db");
         let database = if path.exists() {
             Database::open("world.db")?
@@ -33,16 +42,13 @@ impl Server {
                 }
             }
         });
-        let address = root_address.clone().map(StateMessage::Session);
-        let authenticator = Arc::new(Authenticator::new(address));
-        Ok(Self {
-            endpoint: None,
-            authenticator,
-            root_address,
-        })
+        Ok(Arc::new(Self {
+            endpoint: Mutex::new(None),
+            address,
+        }))
     }
 
-    pub fn open(&mut self, addr: &SocketAddr) -> Result<(), Error> {
+    pub fn open(self: &Arc<Self>, addr: &SocketAddr) -> Result<(), crate::Error> {
         self.close();
         let pem = read("key.pem")?;
         let key = PrivateKey::from_pem(&pem)?;
@@ -59,21 +65,69 @@ impl Server {
         let mut endpoint = Endpoint::builder();
         endpoint.listen(server_config);
         let (endpoint, incoming) = endpoint.bind(&addr)?;
-        listen(incoming, self.authenticator.clone());
-        self.endpoint = Some(endpoint);
+        listen(incoming, self.clone());
+        *self.endpoint.lock().unwrap() = Some(endpoint);
         Ok(())
     }
 
-    pub async fn stop(&mut self) {
+    pub async fn stop(&self) {
         self.close();
         let (send, recv) = oneshot::channel();
-        self.root_address.send(StateMessage::Stop(send));
+        self.address.send(ServerMessage::Stop(send));
         recv.await.unwrap()
     }
 
-    pub fn close(&mut self) {
-        if let Some(endpoint) = self.endpoint.take() {
+    pub fn close(&self) {
+        let mut endpoint = self.endpoint.lock().unwrap();
+        if let Some(endpoint) = endpoint.take() {
             endpoint.close(VarInt::from_u32(2), "Server closed".as_bytes());
         }
     }
 }
+
+impl net::Server for Server {
+    type AuthToken = Token;
+    type AuthError = AuthenticationError;
+    type Push = Push;
+    type Request = Request;
+
+    fn authenticate(
+        &self,
+        client: Address<Self::Push>,
+        token: Self::AuthToken,
+    ) -> Result<Address<Self::Request>, Self::AuthError> {
+        let (mut mailbox, address) = mailbox();
+        let identity = Identity {
+            name: token.name,
+            address: client,
+        };
+        {
+            let address = self.address.clone();
+            spawn(async move {
+                address.send(ServerMessage::Connected(identity.clone()));
+                {
+                    while let Some(message) = mailbox.recv().await {
+                        address.send(ServerMessage::Request(identity.clone(), message));
+                    }
+                }
+                address.send(ServerMessage::Disconnected(identity));
+            });
+        }
+        Ok(address)
+    }
+
+    fn token_size_limit() -> usize {
+        4096
+    }
+}
+
+#[derive(Debug)]
+pub struct AuthenticationError {}
+
+impl Display for AuthenticationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Authentication failed")
+    }
+}
+
+impl Error for AuthenticationError {}

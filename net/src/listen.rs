@@ -7,19 +7,19 @@ use futures::StreamExt;
 use quinn::{Connecting, Incoming, NewConnection, VarInt};
 use tokio::spawn;
 
-use crate::{session, Authenticator, EstablishConnectionError, Reader, RemoteSender};
+use crate::{session, EstablishConnectionError, Reader, RemoteSender, Server};
 
-pub fn listen<A: Authenticator>(mut incoming: Incoming, authenticator: Arc<A>) {
+pub fn listen<S: Server>(mut incoming: Incoming, server: Arc<S>) {
     spawn(async move {
         while let Some(connecting) = incoming.next().await {
-            spawn(accept(connecting, authenticator.clone()));
+            spawn(accept(connecting, server.clone()));
         }
     });
 }
 
-async fn accept<A: Authenticator>(
+async fn accept<S: Server>(
     connecting: Connecting,
-    authenticator: Arc<A>,
+    server: Arc<S>,
 ) -> Result<(), EstablishConnectionError> {
     let NewConnection {
         connection,
@@ -32,7 +32,7 @@ async fn accept<A: Authenticator>(
         .next()
         .await
         .ok_or(EstablishConnectionError::TokenMissing)??;
-    let token = Reader::recv(recv, A::token_size_limit())
+    let token = Reader::recv(recv, S::token_size_limit())
         .await?
         .read()
         .map_err(EstablishConnectionError::Deserialize)?;
@@ -41,7 +41,7 @@ async fn accept<A: Authenticator>(
         sender.send(message);
         Ok(())
     });
-    let receiver = match authenticator.authenticate(client, token) {
+    let receiver = match server.authenticate(client, token) {
         Ok(receiver) => receiver,
         Err(error) => {
             let reason = error.to_string();

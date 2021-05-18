@@ -1,5 +1,4 @@
 mod address;
-mod authenticator;
 mod connect;
 mod error;
 mod from;
@@ -7,17 +6,18 @@ mod listen;
 mod message;
 mod reader;
 mod sender;
+mod server;
 mod session;
 mod writer;
 
 pub use address::*;
-pub use authenticator::*;
-pub use connect::{local_connect, remote_connect};
+pub use connect::{local_connect, remote_connect, Connection};
 pub use error::*;
 pub use from::*;
 pub use listen::listen;
 pub use message::*;
 pub use reader::*;
 use sender::*;
+pub use server::*;
 use session::*;
 pub use writer::*;
