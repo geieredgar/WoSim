@@ -3,8 +3,10 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Barrier,
     },
-    thread::{spawn, Builder, JoinHandle},
+    thread::{Builder, JoinHandle},
 };
+
+use log::error;
 
 use crate::mmap::MappedFile;
 
@@ -28,14 +30,21 @@ impl Synchronizer {
     }
 
     fn spawn(state: Arc<State>, data: MappedFile) -> JoinHandle<()> {
-        Builder::new().name("database synchronization thread".into());
-        spawn(move || loop {
-            state.barrier.wait();
-            if state.cancelled.load(Ordering::SeqCst) {
-                return;
-            }
-            data.sync().unwrap()
-        })
+        Builder::new()
+            .name("database synchronization thread".into())
+            .spawn(move || loop {
+                state.barrier.wait();
+                if state.cancelled.load(Ordering::SeqCst) {
+                    return;
+                }
+                match data.sync() {
+                    Ok(_) => {}
+                    Err(error) => {
+                        error!("{}", error);
+                    }
+                }
+            })
+            .unwrap()
     }
 }
 

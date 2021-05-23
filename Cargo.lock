@@ -2378,6 +2378,7 @@ version = "0.1.0"
 dependencies = [
  "arrayvec",
  "bytemuck",
+ "log",
  "memmap2 0.2.2",
  "page_size",
  "sha3",
