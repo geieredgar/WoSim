@@ -2361,7 +2361,6 @@ name = "wosim-actor"
 version = "0.1.0"
 dependencies = [
  "futures",
- "log",
  "tokio",
  "tokio-util",
 ]

@@ -1,7 +1,5 @@
 use std::{error::Error, fmt::Debug, sync::Arc};
 
-use log::error;
-
 pub type SendError = Box<dyn Error>;
 
 pub type Dispatcher<M> = dyn Fn(M) -> Result<(), SendError> + Send + Sync;
@@ -11,12 +9,6 @@ pub struct Address<M: 'static>(Arc<Dispatcher<M>>);
 impl<M: 'static> Address<M> {
     pub fn new(f: impl Fn(M) -> Result<(), Box<dyn Error>> + Send + Sync + 'static) -> Self {
         Self(Arc::new(f))
-    }
-
-    pub fn send(&self, message: M) {
-        if let Err(error) = self.try_send(message) {
-            error!("Failed sending to address {:?}, caused by: {}", self, error);
-        }
     }
 
     pub fn try_send(&self, message: M) -> Result<(), SendError> {
