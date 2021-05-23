@@ -36,7 +36,7 @@ fn main() -> Result<(), Error> {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let server = Server::new().unwrap();
-        server.open(&"[::]:8888".parse()?)?;
+        server.open(&"[::]:0".parse()?)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }
