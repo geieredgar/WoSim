@@ -6,7 +6,6 @@ mod message;
 mod resolver;
 mod server;
 mod state;
-mod token;
 mod vulkan;
 
 use std::io;
@@ -22,7 +21,6 @@ pub use resolver::*;
 pub use server::*;
 pub(self) use state::State;
 pub(self) use state::World;
-pub use token::*;
 
 pub use net::Connection;
 pub use quinn::Certificate;

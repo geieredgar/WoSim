@@ -4,7 +4,7 @@ use actor::{Address, Mailbox};
 use net::{local_connect, remote_connect, Connection, EstablishConnectionError};
 use quinn::{Certificate, ClientConfigBuilder, Endpoint, EndpointError, TransportConfig};
 
-use crate::{Push, Request, Server, ServerAddress, Token, PROTOCOL};
+use crate::{Push, Request, Server, ServerAddress, PROTOCOL};
 
 pub struct Resolver {
     certificates: Vec<Certificate>,
@@ -18,13 +18,13 @@ impl Resolver {
     pub async fn resolve(
         &self,
         server: ServerAddress,
-        token: Token,
     ) -> Result<(Address<Request>, Mailbox<Push>, Connection<Server>), ResolveError> {
         Ok(match server {
-            ServerAddress::Local(server) => {
+            ServerAddress::Local => {
+                let server = Server::new().map_err(ResolveError::LocalSetupFailed)?;
                 local_connect(server).map_err(ResolveError::EstablishConnection)?
             }
-            ServerAddress::Remote(address) => {
+            ServerAddress::Remote { address, token } => {
                 let mut endpoint = Endpoint::builder();
                 let mut client_config = ClientConfigBuilder::default();
                 client_config.protocols(&[PROTOCOL.as_bytes()]);
@@ -50,7 +50,7 @@ impl Resolver {
                     .map_err(ResolveError::IpResolve)?
                     .next()
                     .ok_or(ResolveError::NoSocketAddr)?;
-                remote_connect(&endpoint, &address, hostname, &token.name)
+                remote_connect(&endpoint, &address, hostname, &token)
                     .await
                     .map_err(ResolveError::EstablishConnection)?
             }
@@ -62,6 +62,7 @@ impl Resolver {
 pub enum ResolveError {
     CertificateAuthority(webpki::Error),
     Bind(EndpointError),
+    LocalSetupFailed(io::Error),
     IpResolve(io::Error),
     NoSocketAddr,
     EstablishConnection(EstablishConnectionError),

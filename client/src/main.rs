@@ -23,7 +23,7 @@ use renderer::Renderer;
 use scene::{ControlState, Object, Transform};
 use semver::Version;
 use server::{
-    Certificate, Connection, Push, Request, ResolveError, Resolver, Server, ServerAddress, Token,
+    Certificate, Connection, Push, Request, ResolveError, Resolver, Server, ServerAddress,
 };
 use tokio::{runtime::Runtime, spawn};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -477,7 +477,10 @@ async fn connect_to_server(
     name: String,
 ) -> Result<(), ResolveError> {
     let (server, mut mailbox, connection) = resolver
-        .resolve(ServerAddress::Remote(address), Token { name })
+        .resolve(ServerAddress::Remote {
+            address,
+            token: name,
+        })
         .await?;
     application.send(ApplicationMessage::Connected(server, connection));
     while let Some(message) = mailbox.recv().await {
