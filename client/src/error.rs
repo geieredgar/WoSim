@@ -1,5 +1,6 @@
 use std::{fmt::Display, io};
 
+use semver::SemVerError;
 use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
 
@@ -13,6 +14,7 @@ pub enum Error {
     NoSuitableDeviceFound,
     NoSuitableSurfaceFormat,
     NoSuitablePresentMode,
+    SemVer(SemVerError),
 }
 
 impl std::error::Error for Error {}
@@ -56,5 +58,11 @@ impl From<super::egui::Error> for Error {
 impl From<ExternalError> for Error {
     fn from(error: ExternalError) -> Self {
         Self::External(error)
+    }
+}
+
+impl From<SemVerError> for Error {
+    fn from(error: SemVerError) -> Self {
+        Self::SemVer(error)
     }
 }

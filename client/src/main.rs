@@ -5,9 +5,7 @@ use std::{
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};
-use ::vulkan::{
-    ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
-};
+use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::{
     dpi::{PhysicalPosition, PhysicalSize, Position},
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
@@ -23,6 +21,7 @@ use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
 use scene::{ControlState, Object, Transform};
+use semver::Version;
 use server::{
     Certificate, Connection, Push, Request, ResolveError, Resolver, ServerAddress, Token,
 };
@@ -77,11 +76,7 @@ impl Application {
         let window = WindowBuilder::new()
             .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
-        let version = Version {
-            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
-            minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
-            patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
-        };
+        let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
             &CString::new("wosim").unwrap(),
             version,
