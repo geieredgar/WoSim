@@ -5,11 +5,10 @@ use std::{
     fs::read,
     io,
     net::SocketAddr,
-    path::Path,
     sync::{Arc, Mutex},
 };
 
-use crate::{handle, state::World, Identity, Push, Request, ServerMessage, State, PROTOCOL};
+use crate::{handle, Identity, Push, Request, ServerMessage, State, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
 use libmdns::{Responder, Service};
@@ -34,12 +33,7 @@ impl Debug for Server {
 impl Server {
     pub fn new() -> io::Result<Arc<Self>> {
         let (mut mailbox, address) = mailbox();
-        let path = Path::new("world.db");
-        let database = if path.exists() {
-            Database::open("world.db")?
-        } else {
-            Database::create("world.db", World::new)?
-        };
+        let database = Database::open("world.db")?;
         spawn(async move {
             let mut state = State { database };
             while let Some(message) = mailbox.recv().await {
