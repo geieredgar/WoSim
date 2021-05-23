@@ -5,6 +5,7 @@ members = [
     "build",
     "db",
     "interop",
+    "launcher",
     "net",
     "util",
     "vulkan",

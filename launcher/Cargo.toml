@@ -1,0 +1,26 @@
+[package]
+name = "wosim-launcher"
+version = "0.1.0"
+authors = ["Edgar Geier <egeier@rhrk.uni-kl.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+workspace = ".."
+edition = "2018"
+
+[dependencies]
+directories = "3.0.2"
+dns-parser = "0.8.0"
+env_logger = "0.8.3"
+iced = { version = "0.3", features = ["tokio", "svg"] }
+iced_native = "0.4"
+iced_wgpu = "0.4"
+iced_winit = "0.3"
+iced_graphics = "0.2"
+interop = { path = "../interop", package = "wosim-interop" }
+log = "0.4.14"
+reqwest = { version = "0.11.3", features = ["json"] }
+semver = { version = "0.11.0", features = ["serde"] }
+serde = { version = "1.0.125", features = ["derive"] }
+serde_json = "1.0.59"
+tokio = { version = "1.6.0", features = ["net", "process"] }
+webbrowser = "0.5.5"
