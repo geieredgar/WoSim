@@ -1,6 +1,7 @@
 use std::{
+    env::current_dir,
     error::Error,
-    fmt::Display,
+    fmt::{Debug, Display},
     fs::read,
     io,
     net::SocketAddr,
@@ -11,6 +12,7 @@ use std::{
 use crate::{handle, state::World, Identity, Push, Request, ServerMessage, State, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
+use libmdns::{Responder, Service};
 use net::{listen, Client};
 use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
@@ -18,10 +20,15 @@ use quinn::{
 };
 use tokio::{spawn, sync::oneshot};
 
-#[derive(Debug)]
 pub struct Server {
-    endpoint: Mutex<Option<Endpoint>>,
+    endpoint: Mutex<Option<(Endpoint, Service)>>,
     address: Address<ServerMessage>,
+}
+
+impl Debug for Server {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Server: {{ address: {:?} }}", self.address)
+    }
 }
 
 impl Server {
@@ -64,8 +71,19 @@ impl Server {
         let mut endpoint = Endpoint::builder();
         endpoint.listen(server_config);
         let (endpoint, incoming) = endpoint.bind(&addr)?;
+        let port = endpoint.local_addr()?.port();
         listen(incoming, self.clone());
-        *self.endpoint.lock().unwrap() = Some(endpoint);
+        let path = current_dir()?;
+        let name = path.file_name().unwrap().to_string_lossy();
+        let (responder, task) = Responder::with_default_handle().unwrap();
+        spawn(task);
+        let service = responder.register(
+            "_wosim-server._udp".into(),
+            format!("wosim-server-{}", port),
+            port,
+            &[&PROTOCOL, "none", &name, "A local server"],
+        );
+        *self.endpoint.lock().unwrap() = Some((endpoint, service));
         Ok(())
     }
 
@@ -78,7 +96,7 @@ impl Server {
 
     pub fn close(&self) {
         let mut endpoint = self.endpoint.lock().unwrap();
-        if let Some(endpoint) = endpoint.take() {
+        if let Some((endpoint, _)) = endpoint.take() {
             endpoint.close(VarInt::from_u32(2), "Server closed".as_bytes());
         }
     }
