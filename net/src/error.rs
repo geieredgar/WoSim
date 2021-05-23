@@ -1,3 +1,5 @@
+use std::str::Utf8Error;
+
 use quinn::{ConnectError, ConnectionError, ReadToEndError, SendDatagramError, WriteError};
 
 #[derive(Debug)]
@@ -9,7 +11,7 @@ pub enum EstablishConnectionError {
     SendDatagram(SendDatagramError),
     Serialize(bincode::Error),
     TokenMissing,
-    InvalidToken,
+    InvalidToken(Utf8Error),
     TokenRejected(String),
     Write(WriteError),
 }

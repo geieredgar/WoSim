@@ -23,7 +23,7 @@ use renderer::Renderer;
 use scene::{ControlState, Object, Transform};
 use semver::Version;
 use server::{
-    Certificate, Connection, Push, Request, ResolveError, Resolver, ServerAddress, Token,
+    Certificate, Connection, Push, Request, ResolveError, Resolver, Server, ServerAddress, Token,
 };
 use tokio::{runtime::Runtime, spawn};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -55,7 +55,7 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    server: Option<(Address<Request>, Connection)>,
+    server: Option<(Address<Request>, Connection<Server>)>,
     resolver: Arc<Resolver>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
@@ -429,7 +429,7 @@ impl Drop for Application {
 #[derive(Debug)]
 pub enum ApplicationMessage {
     Push(Push),
-    Connected(Address<Request>, Connection),
+    Connected(Address<Request>, Connection<Server>),
     Render,
     Connect { address: String, username: String },
     Disconnected,

@@ -1,4 +1,5 @@
 mod address;
+mod client;
 mod connect;
 mod error;
 mod from;
@@ -11,6 +12,7 @@ mod session;
 mod writer;
 
 pub use address::*;
+pub use client::*;
 pub use connect::{local_connect, remote_connect, Connection};
 pub use error::*;
 pub use from::*;

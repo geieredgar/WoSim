@@ -4,7 +4,7 @@ use actor::{Address, Mailbox};
 use net::{local_connect, remote_connect, Connection, EstablishConnectionError};
 use quinn::{Certificate, ClientConfigBuilder, Endpoint, EndpointError, TransportConfig};
 
-use crate::{Push, Request, ServerAddress, Token, PROTOCOLS};
+use crate::{Push, Request, Server, ServerAddress, Token, PROTOCOLS};
 
 pub struct Resolver {
     certificates: Vec<Certificate>,
@@ -19,10 +19,10 @@ impl Resolver {
         &self,
         server: ServerAddress,
         token: Token,
-    ) -> Result<(Address<Request>, Mailbox<Push>, Connection), ResolveError> {
+    ) -> Result<(Address<Request>, Mailbox<Push>, Connection<Server>), ResolveError> {
         Ok(match server {
             ServerAddress::Local(server) => {
-                local_connect(server.as_ref(), token).map_err(ResolveError::EstablishConnection)?
+                local_connect(server).map_err(ResolveError::EstablishConnection)?
             }
             ServerAddress::Remote(address) => {
                 let mut endpoint = Endpoint::builder();
@@ -50,7 +50,7 @@ impl Resolver {
                     .map_err(ResolveError::IpResolve)?
                     .next()
                     .ok_or(ResolveError::NoSocketAddr)?;
-                remote_connect(&endpoint, &address, hostname, &token)
+                remote_connect(&endpoint, &address, hostname, &token.name)
                     .await
                     .map_err(ResolveError::EstablishConnection)?
             }

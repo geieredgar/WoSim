@@ -12,7 +12,7 @@ use egui::{
     Align, Color32, CtxRef, DragValue, RadioButton, ScrollArea, Window,
 };
 use log::{set_max_level, Level, LevelFilter};
-use server::Connection;
+use server::{Connection, Server};
 
 use crate::{renderer::RenderTimestamps, ApplicationMessage};
 
@@ -126,7 +126,7 @@ impl DebugContext {
         &mut self,
         ctx: &CtxRef,
         open: &mut bool,
-        connection: Option<&Connection>,
+        connection: Option<&Connection<Server>>,
     ) {
         Window::new("Information").open(open).show(ctx, |ui| {
             ui.label(format!(
@@ -285,7 +285,7 @@ impl DebugContext {
         &mut self,
         ctx: &CtxRef,
         windows: &mut DebugWindows,
-        connection: Option<&Connection>,
+        connection: Option<&Connection<Server>>,
     ) {
         self.render_configuration(ctx, &mut windows.configuration);
         self.render_information(ctx, &mut windows.information, connection);

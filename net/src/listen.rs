@@ -7,7 +7,7 @@ use futures::StreamExt;
 use quinn::{Connecting, Incoming, NewConnection, VarInt};
 use tokio::spawn;
 
-use crate::{session, EstablishConnectionError, Reader, RemoteSender, Server};
+use crate::{session, Client, EstablishConnectionError, RemoteSender, Server};
 
 pub fn listen<S: Server>(mut incoming: Incoming, server: Arc<S>) {
     spawn(async move {
@@ -32,16 +32,14 @@ async fn accept<S: Server>(
         .next()
         .await
         .ok_or(EstablishConnectionError::TokenMissing)??;
-    let token = Reader::recv(recv, S::token_size_limit())
-        .await?
-        .read()
-        .map_err(EstablishConnectionError::Deserialize)?;
+    let buffer = recv.read_to_end(S::token_size_limit()).await?;
+    let token = std::str::from_utf8(&buffer).map_err(EstablishConnectionError::InvalidToken)?;
     let sender = RemoteSender(connection.clone());
-    let client = Address::new(move |message| {
+    let address = Address::new(move |message| {
         sender.send(message);
         Ok(())
     });
-    let receiver = match server.authenticate(client, token) {
+    let receiver = match server.authenticate(Client::Remote { token }, address) {
         Ok(receiver) => receiver,
         Err(error) => {
             let reason = error.to_string();

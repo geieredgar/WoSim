@@ -8,18 +8,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    handle, state::World, Identity, Push, Request, ServerMessage, State, Token, PROTOCOLS,
-};
+use crate::{handle, state::World, Identity, Push, Request, ServerMessage, State, PROTOCOLS};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
-use net::listen;
+use net::{listen, Client};
 use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
     TransportConfig, VarInt,
 };
 use tokio::{spawn, sync::oneshot};
 
+#[derive(Debug)]
 pub struct Server {
     endpoint: Mutex<Option<Endpoint>>,
     address: Address<ServerMessage>,
@@ -86,21 +85,24 @@ impl Server {
 }
 
 impl net::Server for Server {
-    type AuthToken = Token;
     type AuthError = AuthenticationError;
     type Push = Push;
     type Request = Request;
 
     fn authenticate(
         &self,
-        client: Address<Self::Push>,
-        token: Self::AuthToken,
+        client: Client,
+        address: Address<Self::Push>,
     ) -> Result<Address<Self::Request>, Self::AuthError> {
-        let (mut mailbox, address) = mailbox();
         let identity = Identity {
-            name: token.name,
-            address: client,
+            name: match client {
+                Client::Local => "root",
+                Client::Remote { token } => token,
+            }
+            .to_owned(),
+            address,
         };
+        let (mut mailbox, address) = mailbox();
         {
             let address = self.address.clone();
             spawn(async move {
