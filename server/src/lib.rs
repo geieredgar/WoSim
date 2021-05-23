@@ -25,5 +25,3 @@ pub use net::Connection;
 pub use quinn::Certificate;
 
 pub const PROTOCOL: &str = "wosim/0.1";
-pub const SIZE_LIMIT: usize = 4096;
-pub const SERVER_ACTOR_PORT: u16 = 1;
