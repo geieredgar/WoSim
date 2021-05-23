@@ -34,6 +34,13 @@ impl<S: Server> Connection<S> {
             Connection::Remote(connection) => connection.rtt(),
         }
     }
+
+    pub fn on_local(&self, f: impl FnOnce(&Arc<S>)) {
+        match self {
+            Connection::Local(s) => f(s),
+            Connection::Remote(_) => {}
+        }
+    }
 }
 
 pub fn local_connect<S: Server>(server: Arc<S>) -> ConnectResult<S> {

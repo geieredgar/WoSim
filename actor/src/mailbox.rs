@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 
-use crate::Address;
+use crate::{Address, SendError};
 
 pub type Mailbox<T> = UnboundedReceiver<T>;
 
@@ -13,8 +13,12 @@ pub fn mailbox<T: Send + Debug + 'static>() -> (Mailbox<T>, Address<T>) {
     )
 }
 
-pub async fn forward<T: 'static>(mut mailbox: Mailbox<T>, address: Address<T>) {
+pub async fn forward<T: 'static>(
+    mut mailbox: Mailbox<T>,
+    address: Address<T>,
+) -> Result<(), SendError> {
     while let Some(message) = mailbox.recv().await {
-        address.send(message);
+        address.try_send(message)?;
     }
+    Ok(())
 }

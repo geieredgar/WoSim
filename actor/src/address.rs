@@ -2,7 +2,9 @@ use std::{error::Error, fmt::Debug, sync::Arc};
 
 use log::error;
 
-pub type Dispatcher<M> = dyn Fn(M) -> Result<(), Box<dyn Error>> + Send + Sync;
+pub type SendError = Box<dyn Error>;
+
+pub type Dispatcher<M> = dyn Fn(M) -> Result<(), SendError> + Send + Sync;
 
 pub struct Address<M: 'static>(Arc<Dispatcher<M>>);
 
@@ -17,7 +19,7 @@ impl<M: 'static> Address<M> {
         }
     }
 
-    pub fn try_send(&self, message: M) -> Result<(), Box<dyn Error>> {
+    pub fn try_send(&self, message: M) -> Result<(), SendError> {
         (self.0)(message)
     }
 

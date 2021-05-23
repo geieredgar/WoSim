@@ -1,6 +1,7 @@
 use std::{error::Error, process::exit, sync::Mutex};
 
 use actor::Address;
+use log::error;
 use tokio::runtime::Runtime;
 use winit::{dpi::PhysicalSize, event::WindowEvent, event_loop::ControlFlow, window::WindowId};
 
@@ -53,9 +54,16 @@ pub fn run<F: FnOnce(&EventLoop, Address<Request>) -> Result<Address<Event>, E>,
             return;
         }
         if let Some(event) = map(event) {
-            address.send(event);
+            match address.try_send(event) {
+                Ok(_) => {}
+                Err(error) => {
+                    error!("{}", error);
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
         }
-        *control_flow = ControlFlow::Wait
+        *control_flow = ControlFlow::Wait;
     })
 }
 

@@ -12,6 +12,7 @@ use crate::{handle, Identity, Push, Request, ServerMessage, State, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
 use libmdns::{Responder, Service};
+use log::error;
 use net::{listen, Client};
 use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
@@ -84,7 +85,7 @@ impl Server {
     pub async fn stop(&self) {
         self.close();
         let (send, recv) = oneshot::channel();
-        self.address.send(ServerMessage::Stop(send));
+        let _ = self.address.try_send(ServerMessage::Stop(send));
         recv.await.unwrap()
     }
 
@@ -118,13 +119,23 @@ impl net::Server for Server {
         {
             let address = self.address.clone();
             spawn(async move {
-                address.send(ServerMessage::Connected(identity.clone()));
+                if let Err(error) = address.try_send(ServerMessage::Connected(identity.clone())) {
+                    error!("{}", error);
+                    return;
+                }
                 {
                     while let Some(message) = mailbox.recv().await {
-                        address.send(ServerMessage::Request(identity.clone(), message));
+                        if let Err(error) =
+                            address.try_send(ServerMessage::Request(identity.clone(), message))
+                        {
+                            error!("{}", error);
+                            return;
+                        }
                     }
                 }
-                address.send(ServerMessage::Disconnected(identity));
+                if let Err(error) = address.try_send(ServerMessage::Disconnected(identity)) {
+                    error!("{}", error)
+                }
             });
         }
         Ok(address)

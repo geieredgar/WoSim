@@ -1,4 +1,4 @@
-use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
+use std::{cell::RefCell, env, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};
@@ -76,10 +76,14 @@ impl Application {
             let address = address.clone();
             spawn(async move {
                 while let Some(message) = mailbox.recv().await {
-                    address.send(ApplicationMessage::Push(message));
+                    if let Err(error) = address.try_send(ApplicationMessage::Push(message)) {
+                        error!("{}", error);
+                        break;
+                    }
                 }
             });
         }
+        connection.on_local(|s| s.open(&"[::]:0".parse().unwrap()).unwrap());
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
             &CString::new("wosim").unwrap(),
@@ -99,7 +103,9 @@ impl Application {
         let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
-        address.send(ApplicationMessage::Render);
+        address
+            .try_send(ApplicationMessage::Render)
+            .map_err(Error::Send)?;
         Ok(Self {
             address,
             renderer,
@@ -188,7 +194,9 @@ impl Application {
 
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
         if let ApplicationMessage::ExitRequested = message {
-            self.winit.send(crate::winit::Request::Exit);
+            self.winit
+                .try_send(crate::winit::Request::Exit)
+                .map_err(Error::Send)?;
             return Ok(ControlFlow::Stop);
         }
         if self.handle_early_mouse_grab(&message).is_handled() {
@@ -345,7 +353,9 @@ impl Application {
         if resize {
             self.recreate_renderer()?;
         }
-        self.address.send(ApplicationMessage::Render);
+        self.address
+            .try_send(ApplicationMessage::Render)
+            .map_err(Error::Send)?;
         Ok(())
     }
 
@@ -452,7 +462,7 @@ impl Log for ApplicationLogger {
         if INSIDE_LOG.with(|i| i.replace(true)) {
             return;
         }
-        self.address.send(ApplicationMessage::Log(
+        let _ = self.address.try_send(ApplicationMessage::Log(
             record.level(),
             record.target().to_owned(),
             format!("{}", record.args()),
