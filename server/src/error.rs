@@ -1,3 +1,4 @@
+use rcgen::RcgenError;
 use vulkan::ApiResult;
 
 use std::{io, net::AddrParseError};
@@ -13,6 +14,7 @@ pub enum Error {
     Tls(TLSError),
     WebPki(webpki::Error),
     Endpoint(EndpointError),
+    Rcgen(RcgenError),
     NoSuitableDeviceFound,
 }
 
@@ -61,5 +63,11 @@ impl From<AddrParseError> for Error {
 impl From<EndpointError> for Error {
     fn from(error: EndpointError) -> Self {
         Self::Endpoint(error)
+    }
+}
+
+impl From<RcgenError> for Error {
+    fn from(error: RcgenError) -> Self {
+        Self::Rcgen(error)
     }
 }

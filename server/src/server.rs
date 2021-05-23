@@ -2,7 +2,6 @@ use std::{
     env::current_dir,
     error::Error,
     fmt::{Debug, Display},
-    fs::read,
     io,
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -18,6 +17,7 @@ use quinn::{
     Certificate, CertificateChain, Endpoint, PrivateKey, ServerConfig, ServerConfigBuilder,
     TransportConfig, VarInt,
 };
+use rcgen::generate_simple_self_signed;
 use tokio::{spawn, sync::oneshot};
 
 pub struct Server {
@@ -51,10 +51,12 @@ impl Server {
 
     pub fn open(self: &Arc<Self>, addr: &SocketAddr) -> Result<(), crate::Error> {
         self.close();
-        let pem = read("key.pem")?;
-        let key = PrivateKey::from_pem(&pem)?;
-        let pem = read("cert.pem")?;
-        let cert = Certificate::from_pem(&pem)?;
+        let cert = generate_simple_self_signed(["localhost".to_owned()])?;
+        let der = cert.serialize_private_key_der();
+        let key = PrivateKey::from_der(&der)?;
+        let der = cert.serialize_der()?;
+        println!("Certificate size: {}", der.len());
+        let cert = Certificate::from_der(&der)?;
         let cert_chain = CertificateChain::from_certs(vec![cert]);
         let mut server_config = ServerConfig::default();
         let transport_config = TransportConfig::default();
