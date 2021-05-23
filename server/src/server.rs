@@ -8,7 +8,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{handle, state::World, Identity, Push, Request, ServerMessage, State, PROTOCOLS};
+use crate::{handle, state::World, Identity, Push, Request, ServerMessage, State, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow};
 use db::Database;
 use net::{listen, Client};
@@ -58,7 +58,7 @@ impl Server {
         let transport_config = TransportConfig::default();
         server_config.transport = Arc::new(transport_config);
         let mut server_config = ServerConfigBuilder::new(server_config);
-        server_config.protocols(PROTOCOLS);
+        server_config.protocols(&[PROTOCOL.as_bytes()]);
         server_config.certificate(cert_chain, key)?;
         let server_config = server_config.build();
         let mut endpoint = Endpoint::builder();

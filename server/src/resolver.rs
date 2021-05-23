@@ -4,7 +4,7 @@ use actor::{Address, Mailbox};
 use net::{local_connect, remote_connect, Connection, EstablishConnectionError};
 use quinn::{Certificate, ClientConfigBuilder, Endpoint, EndpointError, TransportConfig};
 
-use crate::{Push, Request, Server, ServerAddress, Token, PROTOCOLS};
+use crate::{Push, Request, Server, ServerAddress, Token, PROTOCOL};
 
 pub struct Resolver {
     certificates: Vec<Certificate>,
@@ -27,7 +27,7 @@ impl Resolver {
             ServerAddress::Remote(address) => {
                 let mut endpoint = Endpoint::builder();
                 let mut client_config = ClientConfigBuilder::default();
-                client_config.protocols(PROTOCOLS);
+                client_config.protocols(&[PROTOCOL.as_bytes()]);
                 for certificate in self.certificates.iter() {
                     client_config
                         .add_certificate_authority(certificate.clone())
