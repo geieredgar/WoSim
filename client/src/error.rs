@@ -1,6 +1,7 @@
 use std::{fmt::Display, io};
 
-use semver::SemVerError;
+use semver::{ReqParseError, SemVerError};
+use server::ResolveError;
 use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
 
@@ -14,7 +15,10 @@ pub enum Error {
     NoSuitableDeviceFound,
     NoSuitableSurfaceFormat,
     NoSuitablePresentMode,
+    Json(serde_json::Error),
     SemVer(SemVerError),
+    ReqParse(ReqParseError),
+    Resolve(ResolveError),
 }
 
 impl std::error::Error for Error {}
@@ -61,8 +65,26 @@ impl From<ExternalError> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Json(error)
+    }
+}
+
+impl From<ReqParseError> for Error {
+    fn from(error: ReqParseError) -> Self {
+        Self::ReqParse(error)
+    }
+}
+
 impl From<SemVerError> for Error {
     fn from(error: SemVerError) -> Self {
         Self::SemVer(error)
+    }
+}
+
+impl From<ResolveError> for Error {
+    fn from(error: ResolveError) -> Self {
+        Self::Resolve(error)
     }
 }
