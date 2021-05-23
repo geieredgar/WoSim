@@ -18,7 +18,7 @@ pub async fn forward<T: 'static>(
     address: Address<T>,
 ) -> Result<(), SendError> {
     while let Some(message) = mailbox.recv().await {
-        address.try_send(message)?;
+        address.send(message)?;
     }
     Ok(())
 }

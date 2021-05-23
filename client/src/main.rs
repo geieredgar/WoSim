@@ -76,7 +76,7 @@ impl Application {
             let address = address.clone();
             spawn(async move {
                 while let Some(message) = mailbox.recv().await {
-                    if let Err(error) = address.try_send(ApplicationMessage::Push(message)) {
+                    if let Err(error) = address.send(ApplicationMessage::Push(message)) {
                         error!("{}", error);
                         break;
                     }
@@ -104,7 +104,7 @@ impl Application {
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
         address
-            .try_send(ApplicationMessage::Render)
+            .send(ApplicationMessage::Render)
             .map_err(Error::Send)?;
         Ok(Self {
             address,
@@ -195,7 +195,7 @@ impl Application {
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
         if let ApplicationMessage::ExitRequested = message {
             self.winit
-                .try_send(crate::winit::Request::Exit)
+                .send(crate::winit::Request::Exit)
                 .map_err(Error::Send)?;
             return Ok(ControlFlow::Stop);
         }
@@ -354,7 +354,7 @@ impl Application {
             self.recreate_renderer()?;
         }
         self.address
-            .try_send(ApplicationMessage::Render)
+            .send(ApplicationMessage::Render)
             .map_err(Error::Send)?;
         Ok(())
     }
@@ -462,7 +462,7 @@ impl Log for ApplicationLogger {
         if INSIDE_LOG.with(|i| i.replace(true)) {
             return;
         }
-        let _ = self.address.try_send(ApplicationMessage::Log(
+        let _ = self.address.send(ApplicationMessage::Log(
             record.level(),
             record.target().to_owned(),
             format!("{}", record.args()),

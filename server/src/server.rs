@@ -85,7 +85,7 @@ impl Server {
     pub async fn stop(&self) {
         self.close();
         let (send, recv) = oneshot::channel();
-        let _ = self.address.try_send(ServerMessage::Stop(send));
+        let _ = self.address.send(ServerMessage::Stop(send));
         recv.await.unwrap()
     }
 
@@ -119,21 +119,21 @@ impl net::Server for Server {
         {
             let address = self.address.clone();
             spawn(async move {
-                if let Err(error) = address.try_send(ServerMessage::Connected(identity.clone())) {
+                if let Err(error) = address.send(ServerMessage::Connected(identity.clone())) {
                     error!("{}", error);
                     return;
                 }
                 {
                     while let Some(message) = mailbox.recv().await {
                         if let Err(error) =
-                            address.try_send(ServerMessage::Request(identity.clone(), message))
+                            address.send(ServerMessage::Request(identity.clone(), message))
                         {
                             error!("{}", error);
                             return;
                         }
                     }
                 }
-                if let Err(error) = address.try_send(ServerMessage::Disconnected(identity)) {
+                if let Err(error) = address.send(ServerMessage::Disconnected(identity)) {
                     error!("{}", error)
                 }
             });

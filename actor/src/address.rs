@@ -11,7 +11,7 @@ impl<M: 'static> Address<M> {
         Self(Arc::new(f))
     }
 
-    pub fn try_send(&self, message: M) -> Result<(), SendError> {
+    pub fn send(&self, message: M) -> Result<(), SendError> {
         (self.0)(message)
     }
 
@@ -19,7 +19,7 @@ impl<M: 'static> Address<M> {
         self,
         transform: F,
     ) -> Address<N> {
-        Address::new(move |message| self.try_send(transform(message)))
+        Address::new(move |message| self.send(transform(message)))
     }
 
     pub fn filter_map<N: Send + Sync + 'static, F: Send + Sync + 'static + Fn(N) -> Option<M>>(
@@ -28,7 +28,7 @@ impl<M: 'static> Address<M> {
     ) -> Address<N> {
         Address::new(move |message| {
             if let Some(message) = transform(message) {
-                self.try_send(message)
+                self.send(message)
             } else {
                 Ok(())
             }

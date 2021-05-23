@@ -14,7 +14,7 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             let world: &World = &state.database;
             let positions = world.positions.read().iter().cloned().collect();
             info!("Client {} connected", identity.name);
-            let _ = identity.address.try_send(Push::Positions(positions));
+            let _ = identity.address.send(Push::Positions(positions));
         }
         ServerMessage::Disconnected(identity) => {
             info!("Client {} disconnected", identity.name);

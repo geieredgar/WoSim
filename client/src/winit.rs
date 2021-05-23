@@ -54,7 +54,7 @@ pub fn run<F: FnOnce(&EventLoop, Address<Request>) -> Result<Address<Event>, E>,
             return;
         }
         if let Some(event) = map(event) {
-            match address.try_send(event) {
+            match address.send(event) {
                 Ok(_) => {}
                 Err(error) => {
                     error!("{}", error);
