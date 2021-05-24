@@ -1,4 +1,9 @@
-use std::{io, net::ToSocketAddrs, sync::Arc};
+use std::{
+    io,
+    net::{IpAddr, ToSocketAddrs},
+    str::FromStr,
+    sync::Arc,
+};
 
 use actor::{mailbox, Address, Mailbox};
 use quinn::{
@@ -72,6 +77,10 @@ impl<S: Service> Resolver<S> {
                     .map_err(ResolveError::IpResolution)?
                     .next()
                     .ok_or(ResolveError::NoSocketAddrFound)?;
+                let server_name = match IpAddr::from_str(&hostname) {
+                    Ok(_) => "localhost",
+                    Err(_) => &hostname,
+                };
                 let NewConnection {
                     connection,
                     bi_streams,
@@ -79,7 +88,7 @@ impl<S: Service> Resolver<S> {
                     datagrams,
                     ..
                 } = endpoint
-                    .connect(&address, &hostname)
+                    .connect(&address, server_name)
                     .map_err(ResolveError::Connect)?
                     .await
                     .map_err(ResolveError::Connecting)?;
