@@ -280,18 +280,21 @@ impl RootComponent {
                             )),
                     )
                     .push(
-                        Row::new()
-                            .padding(20)
-                            .push(Space::with_width(Length::Fill))
-                            .push(
-                                Button::new(
-                                    &mut self.state.scan_local_servers,
-                                    Text::new("Scan local servers"),
-                                )
-                                .padding(5)
-                                .style(PrimaryButton(theme))
-                                .on_press(Message::ScanLocalServers),
-                            ),
+                        Container::new(
+                            Row::new()
+                                .padding(20)
+                                .push(Space::with_width(Length::Fill))
+                                .push(
+                                    Button::new(
+                                        &mut self.state.scan_local_servers,
+                                        Text::new("Scan local servers"),
+                                    )
+                                    .padding(5)
+                                    .style(PrimaryButton(theme))
+                                    .on_press(Message::ScanLocalServers),
+                                ),
+                        )
+                        .style(ForegroundContainer(theme, 0.0)),
                     ),
                 ServerTab::Join => column,
             },
