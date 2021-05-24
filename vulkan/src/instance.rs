@@ -9,10 +9,11 @@ use ash::{
     vk::{make_version, ApplicationInfo, InstanceCreateInfo, SurfaceKHR},
     Entry,
 };
+use semver::Version;
 
 use crate::to_cstr;
 
-use super::{Error, PhysicalDevice, Surface, Version};
+use super::{Error, PhysicalDevice, Surface, VersionExt};
 
 pub struct Instance {
     pub(super) inner: ash::Instance,
@@ -44,7 +45,7 @@ impl Instance {
         let application_info = ApplicationInfo::builder()
             .api_version(make_version(1, 2, 0))
             .application_name(application_name)
-            .application_version(application_version.into());
+            .application_version(application_version.to_u32());
         let extension_names_ptr: Vec<_> = extension_names.iter().map(|c| c.as_ptr()).collect();
         let layer_names_ptr: Vec<_> = layer_names.iter().map(|c| c.as_ptr()).collect();
         let create_info = InstanceCreateInfo::builder()

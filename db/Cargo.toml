@@ -10,6 +10,7 @@ edition = "2018"
 [dependencies]
 arrayvec = "0.7.0"
 bytemuck = { version = "1.5.1", features = ["derive"] }
+log = "0.4.14"
 memmap2 = "0.2.2"
 page_size = "0.4.2"
 sha3 = "0.9.1"

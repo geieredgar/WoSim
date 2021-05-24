@@ -1,13 +1,8 @@
-use std::{
-    cell::RefCell, ffi::CString, fmt::Debug, fs::read, fs::read_dir, future::Future, sync::Arc,
-    time::Instant,
-};
+use std::{cell::RefCell, env, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};
-use ::vulkan::{
-    ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration, Version,
-};
+use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::{
     dpi::{PhysicalPosition, PhysicalSize, Position},
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
@@ -18,15 +13,18 @@ use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
 use error::Error;
+use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::{error, LevelFilter, Log};
 use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
+use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
-use server::{
-    Certificate, Connection, Push, Request, ResolveError, Resolver, ServerAddress, Token,
-};
-use tokio::{runtime::Runtime, spawn};
+use semver::{Compat, Version, VersionReq};
+use serde_json::to_writer;
+use server::{Connection, Push, Request, Service, PROTOCOL};
+use structopt::StructOpt;
+use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 
 mod context;
@@ -37,6 +35,7 @@ mod egui;
 mod error;
 mod frame;
 mod renderer;
+mod resolver;
 mod scene;
 mod shaders;
 mod view;
@@ -56,32 +55,35 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    server: Option<(Address<Request>, Connection)>,
-    resolver: Arc<Resolver>,
+    _server: Address<Request>,
+    connection: Connection<Service>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
 }
 
 impl Application {
-    fn new(
-        event_loop: &EventLoop,
+    async fn new(
+        window: Window,
         winit: Address<crate::winit::Request>,
         address: Address<ApplicationMessage>,
+        resolver: Resolver,
     ) -> Result<Self, Error> {
-        log::set_boxed_logger(Box::new(ApplicationLogger {
-            address: address.clone(),
-            secondary: env_logger::builder().build(),
-        }))
-        .unwrap();
-        log::set_max_level(LevelFilter::Warn);
-        let window = WindowBuilder::new()
-            .with_title(format!("Wosim v{}", env!("CARGO_PKG_VERSION")))
-            .build(event_loop)?;
-        let version = Version {
-            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
-            minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
-            patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
-        };
+        let (_server, mut mailbox, mut connection) = resolver.resolve().await?;
+        {
+            let address = address.clone();
+            spawn(async move {
+                while let Some(message) = mailbox.recv().await {
+                    if let Err(error) = address.send(ApplicationMessage::Push(message)) {
+                        error!("{}", error);
+                        break;
+                    }
+                }
+            });
+        }
+        if let Connection::Local(server) = &mut connection {
+            server.open(&"[::]:0".parse().unwrap()).unwrap();
+        }
+        let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
             &CString::new("wosim").unwrap(),
             version,
@@ -97,19 +99,12 @@ impl Application {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let device = Arc::new(device);
-        let context = Context::new(
-            address.clone(),
-            &device,
-            render_configuration,
-            window.scale_factor() as f32,
-        )?;
+        let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
         let renderer = Renderer::new(&device, &context, swapchain.clone())?;
-        let certificates = read_dir("ca")?
-            .filter_map(|entry| entry.ok().map(|entry| read(entry.path()).ok()).flatten())
-            .filter_map(|pem| Certificate::from_pem(&pem).ok())
-            .collect();
-        address.send(ApplicationMessage::Render);
+        address
+            .send(ApplicationMessage::Render)
+            .map_err(Error::Send)?;
         Ok(Self {
             address,
             renderer,
@@ -128,8 +123,8 @@ impl Application {
             vsync: true,
             last_update: Instant::now(),
             time: 0.0,
-            server: None,
-            resolver: Arc::new(Resolver::new(certificates)),
+            _server,
+            connection,
             windows: DebugWindows::default(),
             winit,
         })
@@ -138,44 +133,69 @@ impl Application {
     fn spawn(
         event_loop: &EventLoop,
         winit: Address<crate::winit::Request>,
-    ) -> Result<Address<Event>, Error> {
+        resolver: Resolver,
+    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
         let (mut mailbox, address) = mailbox();
-        let mut application = Self::new(event_loop, winit, address.clone())?;
-        spawn(async move {
-            while let Some(message) = mailbox.recv().await {
-                match application.handle(message) {
-                    Ok(ControlFlow::Continue) => {}
-                    Ok(ControlFlow::Stop) => return,
-                    Err(error) => {
-                        error!("Task failed: {:?}", error);
-                        return;
+        log::set_boxed_logger(Box::new(ApplicationLogger {
+            address: address.clone(),
+            secondary: env_logger::builder().build(),
+        }))
+        .unwrap();
+        log::set_max_level(LevelFilter::Warn);
+        let window = WindowBuilder::new()
+            .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
+            .build(event_loop)?;
+        let handle = {
+            let address = address.clone();
+            spawn(async move {
+                let mut application =
+                    match Self::new(window, winit, address.clone(), resolver).await {
+                        Ok(application) => application,
+                        Err(error) => {
+                            error!("Task failed: {:?}", error);
+                            return;
+                        }
+                    };
+                while let Some(message) = mailbox.recv().await {
+                    match application.handle(message) {
+                        Ok(ControlFlow::Continue) => {}
+                        Ok(ControlFlow::Stop) => return,
+                        Err(error) => {
+                            error!("Task failed: {:?}", error);
+                            return;
+                        }
                     }
                 }
-            }
-        });
-        Ok(address.filter_map(|event| match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
-                event => Some(ApplicationMessage::WindowEvent(event)),
-            },
-            Event::DeviceEvent { device_id, event } => {
-                Some(ApplicationMessage::DeviceEvent(device_id, event))
-            }
-            Event::UserEvent(UserEvent::ScaleFactorChanged {
-                new_inner_size,
-                scale_factor,
-                ..
-            }) => Some(ApplicationMessage::ScaleFactorChanged(
-                scale_factor,
-                new_inner_size,
-            )),
-            _ => None,
-        }))
+            })
+        };
+        Ok((
+            address.filter_map(|event| match event {
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
+                    event => Some(ApplicationMessage::WindowEvent(event)),
+                },
+                Event::DeviceEvent { device_id, event } => {
+                    Some(ApplicationMessage::DeviceEvent(device_id, event))
+                }
+                Event::UserEvent(UserEvent::ScaleFactorChanged {
+                    new_inner_size,
+                    scale_factor,
+                    ..
+                }) => Some(ApplicationMessage::ScaleFactorChanged(
+                    scale_factor,
+                    new_inner_size,
+                )),
+                _ => None,
+            }),
+            handle,
+        ))
     }
 
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
         if let ApplicationMessage::ExitRequested = message {
-            self.winit.send(crate::winit::Request::Exit);
+            self.winit
+                .send(crate::winit::Request::Exit)
+                .map_err(Error::Send)?;
             return Ok(ControlFlow::Stop);
         }
         if self.handle_early_mouse_grab(&message).is_handled() {
@@ -200,22 +220,9 @@ impl Application {
                     }
                 }
             },
-            ApplicationMessage::Connected(server, connection) => {
-                self.server = Some((server, connection));
-                self.context.debug.connection_status_changed(true);
-            }
-            ApplicationMessage::Connect { address, username } => {
-                spawn(report(connect_to_server(
-                    self.address.clone(),
-                    self.resolver.clone(),
-                    address,
-                    username,
-                )));
-            }
             ApplicationMessage::Disconnected => {
                 info!("Disconnected from server");
-                self.server = None;
-                self.context.debug.connection_status_changed(false);
+                return Ok(ControlFlow::Stop);
             }
             ApplicationMessage::Log(level, target, args) => {
                 self.context.debug.log(level, target, args);
@@ -249,20 +256,15 @@ impl Application {
                             }
                             VirtualKeyCode::F1 => {
                                 if input.state == ElementState::Pressed {
-                                    self.windows.configuration = !self.windows.configuration;
+                                    self.windows.information = !self.windows.information;
                                 }
                             }
                             VirtualKeyCode::F2 => {
                                 if input.state == ElementState::Pressed {
-                                    self.windows.information = !self.windows.information;
-                                }
-                            }
-                            VirtualKeyCode::F3 => {
-                                if input.state == ElementState::Pressed {
                                     self.windows.frame_times = !self.windows.frame_times;
                                 }
                             }
-                            VirtualKeyCode::F4 => {
+                            VirtualKeyCode::F3 => {
                                 if input.state == ElementState::Pressed {
                                     self.windows.log = !self.windows.log;
                                 }
@@ -323,11 +325,9 @@ impl Application {
         self.update();
         self.context.debug.begin_frame();
         let ctx = self.context.egui.begin();
-        self.context.debug.render(
-            &ctx,
-            &mut self.windows,
-            self.server.as_ref().map(|(_, c)| c),
-        );
+        self.context
+            .debug
+            .render(&ctx, &mut self.windows, &self.connection);
         self.context
             .egui
             .end(if self.grab { None } else { Some(&self.window) })?;
@@ -352,7 +352,9 @@ impl Application {
         if resize {
             self.recreate_renderer()?;
         }
-        self.address.send(ApplicationMessage::Render);
+        self.address
+            .send(ApplicationMessage::Render)
+            .map_err(Error::Send)?;
         Ok(())
     }
 
@@ -434,9 +436,7 @@ impl Drop for Application {
 #[derive(Debug)]
 pub enum ApplicationMessage {
     Push(Push),
-    Connected(Address<Request>, Connection),
     Render,
-    Connect { address: String, username: String },
     Disconnected,
     Log(Level, String, String),
     ScaleFactorChanged(f64, PhysicalSize<u32>),
@@ -461,7 +461,7 @@ impl Log for ApplicationLogger {
         if INSIDE_LOG.with(|i| i.replace(true)) {
             return;
         }
-        self.address.send(ApplicationMessage::Log(
+        let _ = self.address.send(ApplicationMessage::Log(
             record.level(),
             record.target().to_owned(),
             format!("{}", record.args()),
@@ -472,29 +472,6 @@ impl Log for ApplicationLogger {
 
     fn flush(&self) {
         self.secondary.flush();
-    }
-}
-
-async fn connect_to_server(
-    application: Address<ApplicationMessage>,
-    resolver: Arc<Resolver>,
-    address: String,
-    name: String,
-) -> Result<(), ResolveError> {
-    let (server, mut mailbox, connection) = resolver
-        .resolve(ServerAddress::Remote(address), Token { name })
-        .await?;
-    application.send(ApplicationMessage::Connected(server, connection));
-    while let Some(message) = mailbox.recv().await {
-        application.send(ApplicationMessage::Push(message));
-    }
-    application.send(ApplicationMessage::Disconnected);
-    Ok(())
-}
-
-async fn report<E: Debug>(f: impl Future<Output = Result<(), E>>) {
-    if let Err(error) = f.await {
-        error!("Task failed: {:?}", error);
     }
 }
 
@@ -524,6 +501,70 @@ fn create_swapchain(
     Ok(device.create_swapchain(configuration)?)
 }
 
+#[derive(StructOpt)]
+enum Command {
+    Join {
+        hostname: String,
+        port: u16,
+        token: String,
+        #[structopt(long)]
+        skip_verification: bool,
+    },
+    Play,
+    Info,
+    Create,
+}
+
+impl Command {
+    fn run(self) -> Result<(), Error> {
+        match self {
+            Command::Join {
+                hostname,
+                port,
+                token,
+                skip_verification,
+            } => run(
+                Runtime::new()?,
+                Self::spawn(Resolver::Remote {
+                    hostname,
+                    port,
+                    token,
+                    skip_verification,
+                }),
+            ),
+            Command::Create => run(Runtime::new()?, Self::spawn(Resolver::Create)),
+            Command::Play => run(Runtime::new()?, Self::spawn(Resolver::Open)),
+            Command::Info => Ok(to_writer(
+                stdout(),
+                &ApplicationInfo {
+                    name: format!("WoSim v{}", env!("CARGO_PKG_VERSION"),),
+                    format: WorldFormat {
+                        base: "mainline".to_owned(),
+                        version: Version::new(0, 1, 0),
+                    },
+                    format_req: WorldFormatReq {
+                        base: "mainline".to_owned(),
+                        version: VersionReq::parse_compat(
+                            env!("CARGO_PKG_VERSION"),
+                            Compat::Cargo,
+                        )?,
+                    },
+                    protocol: PROTOCOL.to_owned(),
+                },
+            )?),
+        }
+    }
+
+    fn spawn(
+        resolver: Resolver,
+    ) -> impl FnOnce(
+        &EventLoop,
+        Address<winit::Request>,
+    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
+        move |event_loop, winit| Application::spawn(event_loop, winit, resolver)
+    }
+}
+
 fn main() -> Result<(), Error> {
-    run(Runtime::new()?, Application::spawn);
+    Command::from_args().run()
 }

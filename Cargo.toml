@@ -1,3 +1,14 @@
 [workspace]
-members = ["client", "actor", "build", "db", "net", "util", "vulkan", "server"]
-default-members = ["client"]
+members = [
+    "actor",
+    "client",
+    "build",
+    "db",
+    "interop",
+    "launcher",
+    "net",
+    "util",
+    "vulkan",
+    "server",
+]
+default-members = ["launcher"]

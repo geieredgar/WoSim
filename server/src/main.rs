@@ -7,10 +7,12 @@ use std::{
     time::Duration,
 };
 
+use net::Server;
+use semver::Version;
 use tokio::{runtime::Runtime, time::sleep};
 use util::iterator::MaxOkFilterMap;
-use vulkan::{Instance, Version};
-use wosim_server::{DeviceCandidate, Error, Server};
+use vulkan::Instance;
+use wosim_server::{DeviceCandidate, Error, Service};
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -22,11 +24,7 @@ fn main() -> Result<(), Error> {
     .unwrap();
     let runtime = Runtime::new()?;
     runtime.block_on(async {
-        let version = Version {
-            major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
-            minor: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
-            patch: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
-        };
+        let version = Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
         let instance = Arc::new(Instance::new(
             &CString::new("wosim").unwrap(),
             version,
@@ -38,12 +36,16 @@ fn main() -> Result<(), Error> {
             .max_ok_filter_map(DeviceCandidate::new)?
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
-        let server = Server::new().unwrap();
-        server.open(&"[::]:8888".parse()?)?;
+        let service = Arc::new(Service::new().map_err(Error::CreateService)?);
+        let mut server = Server::new(service.clone());
+        server
+            .open(&"[::]:0".parse().unwrap())
+            .map_err(Error::OpenServer)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }
-        server.stop().await;
+        server.close();
+        let _ = service.stop().await;
         Ok(())
     })
 }

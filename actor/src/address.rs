@@ -1,8 +1,8 @@
 use std::{error::Error, fmt::Debug, sync::Arc};
 
-use log::error;
+pub type SendError = Box<dyn Error>;
 
-pub type Dispatcher<M> = dyn Fn(M) -> Result<(), Box<dyn Error>> + Send + Sync;
+pub type Dispatcher<M> = dyn Fn(M) -> Result<(), SendError> + Send + Sync;
 
 pub struct Address<M: 'static>(Arc<Dispatcher<M>>);
 
@@ -11,13 +11,7 @@ impl<M: 'static> Address<M> {
         Self(Arc::new(f))
     }
 
-    pub fn send(&self, message: M) {
-        if let Err(error) = self.try_send(message) {
-            error!("Failed sending to address {:?}, caused by: {}", self, error);
-        }
-    }
-
-    pub fn try_send(&self, message: M) -> Result<(), Box<dyn Error>> {
+    pub fn send(&self, message: M) -> Result<(), SendError> {
         (self.0)(message)
     }
 
@@ -25,7 +19,7 @@ impl<M: 'static> Address<M> {
         self,
         transform: F,
     ) -> Address<N> {
-        Address::new(move |message| self.try_send(transform(message)))
+        Address::new(move |message| self.send(transform(message)))
     }
 
     pub fn filter_map<N: Send + Sync + 'static, F: Send + Sync + 'static + Fn(N) -> Option<M>>(
@@ -34,7 +28,7 @@ impl<M: 'static> Address<M> {
     ) -> Address<N> {
         Address::new(move |message| {
             if let Some(message) = transform(message) {
-                self.try_send(message)
+                self.send(message)
             } else {
                 Ok(())
             }

@@ -1,4 +1,4 @@
-# Wosim
+# WoSim
 
 ## License
 

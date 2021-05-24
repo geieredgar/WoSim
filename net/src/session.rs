@@ -47,7 +47,7 @@ async fn bi_stream<M: Message>(send: SendStream, recv: RecvStream, receiver: Add
             return;
         }
     };
-    receiver.send(message)
+    let _ = receiver.send(message);
 }
 
 async fn uni_stream<M: Message>(recv: RecvStream, receiver: Address<M>) {
@@ -58,7 +58,7 @@ async fn uni_stream<M: Message>(recv: RecvStream, receiver: Address<M>) {
             return;
         }
     };
-    receiver.send(message)
+    let _ = receiver.send(message);
 }
 
 async fn datagram<M: Message>(datagram: Bytes, receiver: Address<M>) {
@@ -69,5 +69,5 @@ async fn datagram<M: Message>(datagram: Bytes, receiver: Address<M>) {
             return;
         }
     };
-    receiver.send(message);
+    let _ = receiver.send(message);
 }
