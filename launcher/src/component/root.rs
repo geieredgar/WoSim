@@ -74,7 +74,11 @@ impl RootComponent {
                 self.visible = true;
             }
             Message::SelectWorldTab => self.tab = RootTab::Worlds(WorldTab::List),
-            Message::SelectServerTab => self.tab = RootTab::Servers(ServerTab::List),
+            Message::SelectServerTab => {
+                self.local_servers.clear();
+                self.local_server_scanner.rescan();
+                self.tab = RootTab::Servers(ServerTab::List)
+            }
             Message::ScanLocalServers => {
                 self.local_servers.clear();
                 self.local_server_scanner.rescan();
