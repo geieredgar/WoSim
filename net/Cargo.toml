@@ -12,8 +12,11 @@ actor = { path = "../actor", package = "wosim-actor" }
 bincode = "1.3.3"
 bytes = "1.0.1"
 futures = "0.3.14"
+libmdns = "0.6.1"
 log = "0.4.14"
+rustls = { version = "*", features = ["dangerous_configuration"] }
 serde = "1.0.125"
 tokio = { version = "1.6.0", features = ["rt"] }
 util = { path = "../util", package = "wosim-util" }
 quinn = "0.7.2"
+webpki = "0.21"

@@ -2,9 +2,10 @@ use std::{fmt::Display, io};
 
 use actor::SendError;
 use semver::{ReqParseError, SemVerError};
-use server::ResolveError;
 use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
+
+use crate::resolver::ResolveError;
 
 #[derive(Debug)]
 pub enum Error {

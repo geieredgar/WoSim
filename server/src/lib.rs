@@ -1,24 +1,20 @@
-mod address;
 mod error;
 mod handle;
 mod identity;
 mod message;
-mod resolver;
-mod server;
+mod service;
 mod state;
 mod vulkan;
 
 use std::io;
 
 pub use crate::vulkan::*;
-pub use address::*;
 use db::Database;
 pub use error::*;
 pub(self) use handle::handle;
 pub(self) use identity::Identity;
 pub use message::*;
-pub use resolver::*;
-pub use server::*;
+pub use service::*;
 pub(self) use state::State;
 pub(self) use state::World;
 

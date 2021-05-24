@@ -7,11 +7,12 @@ use std::{
     time::Duration,
 };
 
+use net::Server;
 use semver::Version;
 use tokio::{runtime::Runtime, time::sleep};
 use util::iterator::MaxOkFilterMap;
 use vulkan::Instance;
-use wosim_server::{DeviceCandidate, Error, Server};
+use wosim_server::{DeviceCandidate, Error, Service};
 
 fn main() -> Result<(), Error> {
     env_logger::init();
@@ -35,12 +36,16 @@ fn main() -> Result<(), Error> {
             .max_ok_filter_map(DeviceCandidate::new)?
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
-        let server = Server::new().unwrap();
-        server.open(&"[::]:0".parse()?)?;
+        let service = Arc::new(Service::new().map_err(Error::CreateService)?);
+        let mut server = Server::new(service.clone());
+        server
+            .open(&"[::]:0".parse().unwrap())
+            .map_err(Error::OpenServer)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }
-        server.stop().await;
+        server.close();
+        let _ = service.stop().await;
         Ok(())
     })
 }

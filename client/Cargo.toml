@@ -16,6 +16,7 @@ env_logger = "0.8.3"
 interop = { path = "../interop", package = "wosim-interop" }
 log = "0.4.14"
 nalgebra = "0.26.1"
+net = { path = "../net", package = "wosim-net" }
 tokio = { version = "1.6.0", features = ["rt", "rt-multi-thread", "time"] }
 semver = "0.11.0"
 serde_json = "1.0.59"

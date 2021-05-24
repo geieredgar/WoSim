@@ -1,20 +1,26 @@
-use std::error::Error;
-use std::fmt::Debug;
+use std::{net::SocketAddr, sync::Arc};
 
-use actor::Address;
+use crate::{Listener, OpenError, Service};
 
-use crate::{Client, Message};
+pub struct Server<S: Service> {
+    service: Arc<S>,
+    _listener: Option<Listener>,
+}
 
-pub trait Server: Send + Sync + 'static {
-    type AuthError: Error;
-    type Push: Message + Debug;
-    type Request: Message + Debug;
+impl<S: Service> Server<S> {
+    pub fn new(service: Arc<S>) -> Self {
+        Self {
+            service,
+            _listener: None,
+        }
+    }
 
-    fn authenticate(
-        &self,
-        client: Client,
-        address: Address<Self::Push>,
-    ) -> Result<Address<Self::Request>, Self::AuthError>;
+    pub fn open(&mut self, address: &SocketAddr) -> Result<(), OpenError> {
+        self._listener = Some(Listener::open(self.service.clone(), address)?);
+        Ok(())
+    }
 
-    fn token_size_limit() -> usize;
+    pub fn close(&mut self) {
+        self._listener = None
+    }
 }

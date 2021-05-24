@@ -18,10 +18,11 @@ use log::{error, LevelFilter, Log};
 use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use renderer::Renderer;
+use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
 use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
-use server::{Connection, Push, Request, Resolver, Server, ServerAddress, PROTOCOL};
+use server::{Connection, Push, Request, Service, PROTOCOL};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -34,6 +35,7 @@ mod egui;
 mod error;
 mod frame;
 mod renderer;
+mod resolver;
 mod scene;
 mod shaders;
 mod view;
@@ -54,7 +56,7 @@ struct Application {
     last_update: Instant,
     time: f32,
     _server: Address<Request>,
-    connection: Connection<Server>,
+    connection: Connection<Service>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
 }
@@ -64,14 +66,9 @@ impl Application {
         window: Window,
         winit: Address<crate::winit::Request>,
         address: Address<ApplicationMessage>,
-        server_address: ServerAddress,
-        create_world: bool,
+        resolver: Resolver,
     ) -> Result<Self, Error> {
-        let resolver = Resolver::new(vec![]);
-        if create_world {
-            server::create_world()?
-        }
-        let (_server, mut mailbox, connection) = resolver.resolve(server_address).await?;
+        let (_server, mut mailbox, mut connection) = resolver.resolve().await?;
         {
             let address = address.clone();
             spawn(async move {
@@ -83,7 +80,9 @@ impl Application {
                 }
             });
         }
-        connection.on_local(|s| s.open(&"[::]:0".parse().unwrap()).unwrap());
+        if let Connection::Local(server) = &mut connection {
+            server.open(&"[::]:0".parse().unwrap()).unwrap();
+        }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
             &CString::new("wosim").unwrap(),
@@ -134,8 +133,7 @@ impl Application {
     fn spawn(
         event_loop: &EventLoop,
         winit: Address<crate::winit::Request>,
-        server_address: ServerAddress,
-        create_world: bool,
+        resolver: Resolver,
     ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
         let (mut mailbox, address) = mailbox();
         log::set_boxed_logger(Box::new(ApplicationLogger {
@@ -151,9 +149,7 @@ impl Application {
             let address = address.clone();
             spawn(async move {
                 let mut application =
-                    match Self::new(window, winit, address.clone(), server_address, create_world)
-                        .await
-                    {
+                    match Self::new(window, winit, address.clone(), resolver).await {
                         Ok(application) => application,
                         Err(error) => {
                             error!("Task failed: {:?}", error);
@@ -507,7 +503,13 @@ fn create_swapchain(
 
 #[derive(StructOpt)]
 enum Command {
-    Join { address: String, token: String },
+    Join {
+        hostname: String,
+        port: u16,
+        token: String,
+        #[structopt(long)]
+        skip_verification: bool,
+    },
     Play,
     Info,
     Create,
@@ -516,12 +518,22 @@ enum Command {
 impl Command {
     fn run(self) -> Result<(), Error> {
         match self {
-            Command::Join { address, token } => run(
+            Command::Join {
+                hostname,
+                port,
+                token,
+                skip_verification,
+            } => run(
                 Runtime::new()?,
-                Self::spawn(ServerAddress::Remote { address, token }, false),
+                Self::spawn(Resolver::Remote {
+                    hostname,
+                    port,
+                    token,
+                    skip_verification,
+                }),
             ),
-            Command::Create => run(Runtime::new()?, Self::spawn(ServerAddress::Local, true)),
-            Command::Play => run(Runtime::new()?, Self::spawn(ServerAddress::Local, false)),
+            Command::Create => run(Runtime::new()?, Self::spawn(Resolver::Create)),
+            Command::Play => run(Runtime::new()?, Self::spawn(Resolver::Open)),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {
@@ -544,13 +556,12 @@ impl Command {
     }
 
     fn spawn(
-        server_address: ServerAddress,
-        create_world: bool,
+        resolver: Resolver,
     ) -> impl FnOnce(
         &EventLoop,
         Address<winit::Request>,
     ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
-        move |event_loop, winit| Application::spawn(event_loop, winit, server_address, create_world)
+        move |event_loop, winit| Application::spawn(event_loop, winit, resolver)
     }
 }
 
