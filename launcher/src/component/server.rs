@@ -36,8 +36,8 @@ impl ServerComponent {
                     .push(
                         Column::new()
                             .push(Text::new(format!(
-                                "{} [{}]",
-                                self.server.name, self.server.address
+                                "{} [{}:{}]",
+                                self.server.name, self.server.hostname, self.server.port
                             )))
                             .push(Text::new(self.server.description.to_string())),
                     )

@@ -1,7 +1,7 @@
 use std::{
     hash::{Hash, Hasher},
     io,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddrV4},
     str::from_utf8,
     time::Duration,
 };
@@ -16,7 +16,8 @@ use tokio::{net::UdpSocket, spawn, time::timeout};
 
 #[derive(Clone, Debug)]
 pub struct Server {
-    pub address: SocketAddr,
+    pub hostname: String,
+    pub port: u16,
     pub protocol: String,
     pub authentication: Authentication,
     pub name: String,
@@ -33,7 +34,7 @@ pub enum Authentication {
 
 impl Server {
     fn try_from(packet: &Packet) -> Option<Self> {
-        let ip = Self::records(packet).find_map(|record| match record.data {
+        let ip: IpAddr = Self::records(packet).find_map(|record| match record.data {
             RData::A(record) => Some(record.0.into()),
             RData::AAAA(record) => Some(record.0.into()),
             _ => None,
@@ -54,9 +55,9 @@ impl Server {
                 }
                 _ => None,
             })?;
-        let address = SocketAddr::new(ip, port);
         Some(Self {
-            address,
+            hostname: ip.to_string(),
+            port,
             protocol,
             authentication,
             name,

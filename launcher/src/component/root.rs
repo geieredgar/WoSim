@@ -132,8 +132,10 @@ impl RootComponent {
                         async move {
                             match process::Command::new(installation.path.as_os_str())
                                 .arg("join")
-                                .arg(info.address.to_string())
+                                .arg(info.hostname)
+                                .arg(info.port.to_string())
                                 .arg("anonymous")
+                                .arg("--skip-verification")
                                 .setup_env()
                                 .spawn()
                             {
