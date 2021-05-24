@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicIsize, Ordering},
         Arc, Barrier,
     },
     thread::{Builder, JoinHandle},
@@ -19,13 +19,14 @@ impl Synchronizer {
     pub fn new(data: MappedFile) -> Self {
         let state = Arc::new(State {
             barrier: Barrier::new(2),
-            cancelled: AtomicBool::new(false),
+            pending: AtomicIsize::new(0),
         });
         let handle = Some(Self::spawn(state.clone(), data));
         Self { state, handle }
     }
 
     pub fn sync(&self) {
+        self.state.pending.fetch_add(1, Ordering::SeqCst);
         self.state.barrier.wait();
     }
 
@@ -34,7 +35,7 @@ impl Synchronizer {
             .name("database synchronization thread".into())
             .spawn(move || loop {
                 state.barrier.wait();
-                if state.cancelled.load(Ordering::SeqCst) {
+                if state.pending.fetch_sub(1, Ordering::SeqCst) == 0 {
                     return;
                 }
                 match data.sync() {
@@ -50,7 +51,6 @@ impl Synchronizer {
 
 impl Drop for Synchronizer {
     fn drop(&mut self) {
-        self.state.cancelled.store(true, Ordering::SeqCst);
         self.state.barrier.wait();
         self.handle.take().unwrap().join().unwrap();
     }
@@ -58,5 +58,5 @@ impl Drop for Synchronizer {
 
 struct State {
     barrier: Barrier,
-    cancelled: AtomicBool,
+    pending: AtomicIsize,
 }
