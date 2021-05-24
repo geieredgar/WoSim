@@ -68,7 +68,11 @@ pub enum ServerTab {
 impl RootComponent {
     pub fn update(&mut self, message: Message) -> io::Result<Command<Message>> {
         match message {
-            Message::Show => self.visible = true,
+            Message::Show => {
+                self.local_servers.clear();
+                self.local_server_scanner.rescan();
+                self.visible = true;
+            }
             Message::SelectWorldTab => self.tab = RootTab::Worlds(WorldTab::List),
             Message::SelectServerTab => self.tab = RootTab::Servers(ServerTab::List),
             Message::ScanLocalServers => {
