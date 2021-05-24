@@ -23,7 +23,7 @@ use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
 use server::{Connection, Push, Request, Resolver, Server, ServerAddress, PROTOCOL};
 use structopt::StructOpt;
-use tokio::{runtime::Runtime, spawn};
+use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 
 mod context;
@@ -136,7 +136,7 @@ impl Application {
         winit: Address<crate::winit::Request>,
         server_address: ServerAddress,
         create_world: bool,
-    ) -> Result<Address<Event>, Error> {
+    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
         let (mut mailbox, address) = mailbox();
         log::set_boxed_logger(Box::new(ApplicationLogger {
             address: address.clone(),
@@ -147,7 +147,7 @@ impl Application {
         let window = WindowBuilder::new()
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
-        {
+        let handle = {
             let address = address.clone();
             spawn(async move {
                 let mut application =
@@ -170,26 +170,29 @@ impl Application {
                         }
                     }
                 }
-            });
-        }
-        Ok(address.filter_map(|event| match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
-                event => Some(ApplicationMessage::WindowEvent(event)),
-            },
-            Event::DeviceEvent { device_id, event } => {
-                Some(ApplicationMessage::DeviceEvent(device_id, event))
-            }
-            Event::UserEvent(UserEvent::ScaleFactorChanged {
-                new_inner_size,
-                scale_factor,
-                ..
-            }) => Some(ApplicationMessage::ScaleFactorChanged(
-                scale_factor,
-                new_inner_size,
-            )),
-            _ => None,
-        }))
+            })
+        };
+        Ok((
+            address.filter_map(|event| match event {
+                Event::WindowEvent { event, .. } => match event {
+                    WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
+                    event => Some(ApplicationMessage::WindowEvent(event)),
+                },
+                Event::DeviceEvent { device_id, event } => {
+                    Some(ApplicationMessage::DeviceEvent(device_id, event))
+                }
+                Event::UserEvent(UserEvent::ScaleFactorChanged {
+                    new_inner_size,
+                    scale_factor,
+                    ..
+                }) => Some(ApplicationMessage::ScaleFactorChanged(
+                    scale_factor,
+                    new_inner_size,
+                )),
+                _ => None,
+            }),
+            handle,
+        ))
     }
 
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
@@ -543,7 +546,10 @@ impl Command {
     fn spawn(
         server_address: ServerAddress,
         create_world: bool,
-    ) -> impl FnOnce(&EventLoop, Address<winit::Request>) -> Result<Address<Event>, Error> {
+    ) -> impl FnOnce(
+        &EventLoop,
+        Address<winit::Request>,
+    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
         move |event_loop, winit| Application::spawn(event_loop, winit, server_address, create_world)
     }
 }
