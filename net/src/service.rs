@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use actor::Address;
 use quinn::{CertificateChain, PrivateKey, TransportConfig};
 
-use crate::{Client, Message};
+use crate::{AuthToken, Connection, Message};
 
 pub trait Service: Send + Sync + 'static {
     type AuthError: Error + Send;
@@ -13,8 +13,8 @@ pub trait Service: Send + Sync + 'static {
 
     fn authenticate(
         &self,
-        client: Client,
-        address: Address<Self::Push>,
+        connection: Connection<Self::Push>,
+        token: AuthToken,
     ) -> Result<Address<Self::Request>, Self::AuthError>;
 
     fn token_size_limit(&self) -> usize;

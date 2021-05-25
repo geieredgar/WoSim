@@ -26,13 +26,15 @@ impl Resolver {
         match self {
             Resolver::Create => {
                 create_world().map_err(ResolveError::CreateWorld)?;
-                net::Resolver::Local(Arc::new(
-                    Service::new().map_err(ResolveError::CreateService)?,
-                ))
+                net::Resolver::Local {
+                    service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
+                    token: "anonymous".to_owned(),
+                }
             }
-            Resolver::Open => net::Resolver::Local(Arc::new(
-                Service::new().map_err(ResolveError::CreateService)?,
-            )),
+            Resolver::Open => net::Resolver::Local {
+                service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
+                token: "anonymous".to_owned(),
+            },
             Resolver::Remote {
                 hostname,
                 port,

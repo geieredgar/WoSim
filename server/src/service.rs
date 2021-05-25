@@ -10,7 +10,7 @@ use crate::{handle, Identity, Push, Request, ServerMessage, State, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow, SendError};
 use db::Database;
 use log::error;
-use net::Client;
+use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
 use tokio::{spawn, sync::oneshot};
@@ -84,16 +84,16 @@ impl net::Service for Service {
 
     fn authenticate(
         &self,
-        client: Client,
-        address: Address<Self::Push>,
+        connection: Connection<Self::Push>,
+        token: AuthToken,
     ) -> Result<Address<Self::Request>, Self::AuthError> {
         let identity = Identity {
-            name: match client {
-                Client::Local => "root",
-                Client::Remote { token } => token,
+            name: match token {
+                AuthToken::Local(token) => token,
+                AuthToken::Remote(token) => token,
             }
             .to_owned(),
-            address,
+            connection,
         };
         let (mut mailbox, address) = mailbox();
         {

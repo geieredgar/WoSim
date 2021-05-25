@@ -17,6 +17,7 @@ use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::{error, LevelFilter, Log};
 use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
+use net::Server;
 use renderer::Renderer;
 use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
@@ -55,8 +56,8 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    _server: Address<Request>,
-    connection: Connection<Service>,
+    _server: Option<Server<Service>>,
+    connection: Connection<Request>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
 }
@@ -68,7 +69,7 @@ impl Application {
         address: Address<ApplicationMessage>,
         resolver: Resolver,
     ) -> Result<Self, Error> {
-        let (_server, mut mailbox, mut connection) = resolver.resolve().await?;
+        let (connection, mut mailbox, mut _server) = resolver.resolve().await?;
         {
             let address = address.clone();
             spawn(async move {
@@ -80,7 +81,7 @@ impl Application {
                 }
             });
         }
-        if let Connection::Local(server) = &mut connection {
+        if let Some(server) = &mut _server {
             server.open(&"[::]:0".parse().unwrap()).unwrap();
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;

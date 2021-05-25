@@ -1,10 +1,7 @@
-use actor::Address;
 use log::{error, warn};
-use quinn::{Connection, SendStream};
+use quinn::SendStream;
 use serde::Serialize;
 use tokio::{spawn, sync::oneshot::Sender};
-
-use crate::Message;
 
 pub enum ReturnAddress<T: Serialize + Send + 'static> {
     Local(Sender<T>),
@@ -39,22 +36,4 @@ impl<T: Serialize + Send + 'static> ReturnAddress<T> {
             }
         }
     }
-}
-
-impl<T: Serialize + Send + 'static> From<Sender<T>> for ReturnAddress<T> {
-    fn from(sender: Sender<T>) -> Self {
-        ReturnAddress::Local(sender)
-    }
-}
-
-pub fn remote_address<M: Message>(connection: Connection) -> Address<M> {
-    Address::new(move |message: M| {
-        let connection = connection.clone();
-        spawn(async move {
-            if let Err(error) = message.send(connection) {
-                warn!("Sending message failed: {}", error)
-            }
-        });
-        Ok(())
-    })
 }
