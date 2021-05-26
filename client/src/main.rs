@@ -1,4 +1,6 @@
-use std::{cell::RefCell, env, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
+use std::{
+    cell::RefCell, env::set_var, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant,
+};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};
@@ -566,6 +568,15 @@ impl Command {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+fn setup_env() {}
+
+#[cfg(target_os = "macos")]
+fn setup_env() {
+    set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
+}
+
 fn main() -> Result<(), Error> {
+    setup_env();
     Command::from_args().run()
 }

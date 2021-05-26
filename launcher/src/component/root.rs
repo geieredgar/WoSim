@@ -13,7 +13,6 @@ use log::error;
 use tokio::process;
 
 use crate::{
-    env::EnvExt,
     installation::Installation,
     message::Message,
     scan::scan_dir,
@@ -105,7 +104,6 @@ impl RootComponent {
                             match process::Command::new(installation.path.as_os_str())
                                 .current_dir(world.path)
                                 .arg("play")
-                                .setup_env()
                                 .spawn()
                             {
                                 Ok(mut child) => match child.wait().await {
@@ -136,7 +134,6 @@ impl RootComponent {
                                 .arg(info.port.to_string())
                                 .arg("anonymous")
                                 .arg("--skip-verification")
-                                .setup_env()
                                 .spawn()
                             {
                                 Ok(mut child) => match child.wait().await {
@@ -190,7 +187,6 @@ impl RootComponent {
                         match process::Command::new(installation.path.as_os_str())
                             .current_dir(path)
                             .arg("create")
-                            .setup_env()
                             .spawn()
                         {
                             Ok(mut child) => match child.wait().await {

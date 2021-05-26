@@ -1,5 +1,4 @@
 mod component;
-mod env;
 mod icon;
 mod installation;
 mod message;
