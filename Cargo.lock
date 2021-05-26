@@ -4300,6 +4300,7 @@ name = "wosim-db"
 version = "0.1.0"
 dependencies = [
  "arrayvec 0.7.0",
+ "atomic_refcell",
  "bytemuck",
  "log",
  "memmap2 0.2.2",

@@ -1,19 +1,18 @@
-use std::sync::RwLockReadGuard;
-
 use crate::{
     allocator::Allocator,
     page::{Page, PageNr, Pager, NULL_PAGE_NR},
     raw::RawDatabase,
 };
+use atomic_refcell::AtomicRef;
 use bytemuck::Zeroable;
 
 pub struct Lock<'a> {
     pager: Pager,
-    database: RwLockReadGuard<'a, RawDatabase>,
+    database: AtomicRef<'a, RawDatabase>,
 }
 
 impl<'a> Lock<'a> {
-    pub fn new(database: RwLockReadGuard<'a, RawDatabase>) -> Self {
+    pub fn new(database: AtomicRef<'a, RawDatabase>) -> Self {
         let pager = database.pager();
         Self { pager, database }
     }
@@ -73,5 +72,14 @@ impl<'a> Lock<'a> {
 
     fn allocator(&self) -> Allocator<'_> {
         Allocator::new(self.database.allocator_state(), &self.pager)
+    }
+}
+
+impl<'a> Clone for Lock<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            database: AtomicRef::clone(&self.database),
+            pager: self.database.pager(),
+        }
     }
 }

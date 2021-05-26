@@ -9,6 +9,7 @@ edition = "2018"
 
 [dependencies]
 arrayvec = "0.7.0"
+atomic_refcell = "0.1.7"
 bytemuck = { version = "1.5.1", features = ["derive"] }
 log = "0.4.14"
 memmap2 = "0.2.2"
