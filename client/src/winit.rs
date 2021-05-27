@@ -34,6 +34,7 @@ struct Handler<A: Application> {
 
 impl<A: Application> Drop for Handler<A> {
     fn drop(&mut self) {
+        let _guard = self.runtime.enter();
         self.application.shutdown(&self.runtime)
     }
 }
