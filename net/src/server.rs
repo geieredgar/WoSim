@@ -23,4 +23,8 @@ impl<S: Service> Server<S> {
     pub fn close(&mut self) {
         self._listener = None
     }
+
+    pub fn service(&self) -> &Arc<S> {
+        &self.service
+    }
 }
