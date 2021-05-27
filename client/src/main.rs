@@ -1,22 +1,26 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use crate::winit::{run, Event, EventLoop, UserEvent};
+use crate::winit::run;
 use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
+use ::winit::event::Event;
+use ::winit::event_loop::EventLoop;
 use ::winit::{
-    dpi::{PhysicalPosition, PhysicalSize},
-    event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
+    dpi::PhysicalPosition,
+    event::{DeviceEvent, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
+    event_loop::ControlFlow,
     window::{Fullscreen, Window, WindowBuilder},
 };
-use actor::{mailbox, Address, ControlFlow};
+use actor::Address;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
 use error::Error;
 use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
+use log::Level;
 use log::{error, LevelFilter, Log};
-use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use net::Server;
 use renderer::Renderer;
@@ -28,7 +32,7 @@ use server::{
     Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
 };
 use structopt::StructOpt;
-use tokio::{runtime::Runtime, spawn, task::JoinHandle};
+use tokio::{runtime::Runtime, spawn};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 use uuid::Uuid;
 
@@ -48,7 +52,6 @@ mod vulkan;
 mod winit;
 
 struct Application {
-    address: Address<ApplicationMessage>,
     renderer: Renderer,
     swapchain: Arc<Swapchain>,
     context: Context,
@@ -64,348 +67,11 @@ struct Application {
     server: Option<Server<Service>>,
     connection: Connection<Request>,
     windows: DebugWindows,
-    winit: Address<crate::winit::Request>,
     uuid: Uuid,
     other_players: HashMap<Uuid, (Player, usize)>,
 }
 
 impl Application {
-    async fn new(
-        window: Window,
-        winit: Address<crate::winit::Request>,
-        address: Address<ApplicationMessage>,
-        resolver: Resolver,
-    ) -> Result<Self, Error> {
-        let (connection, mut mailbox, mut server) = resolver.resolve().await?;
-        {
-            let address = address.clone();
-            spawn(async move {
-                while let Some(message) = mailbox.recv().await {
-                    if let Err(error) = address.send(ApplicationMessage::Push(message)) {
-                        error!("{}", error);
-                        break;
-                    }
-                }
-            });
-        }
-        if let Some(server) = &mut server {
-            server.open().unwrap();
-        }
-        let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
-        let instance = Arc::new(Instance::new(
-            &CString::new("wosim").unwrap(),
-            version,
-            enumerate_required_extensions(&window)?,
-        )?);
-        let surface = instance.create_surface(|entry, instance| unsafe {
-            create_surface(entry, instance, &window, None)
-        })?;
-        let (device, render_configuration) = instance
-            .physical_devices()?
-            .into_iter()
-            .max_ok_filter_map(|physical_device| DeviceCandidate::new(physical_device, &surface))?
-            .ok_or(Error::NoSuitableDeviceFound)?
-            .create()?;
-        let device = Arc::new(device);
-        let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
-        let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
-        let renderer = Renderer::new(&device, &context, swapchain.clone())?;
-        address
-            .send(ApplicationMessage::Render)
-            .map_err(Error::Send)?;
-        let now = Instant::now();
-        Ok(Self {
-            address,
-            renderer,
-            swapchain,
-            context,
-            device,
-            surface,
-            window,
-            control_state: ControlState {
-                forward: false,
-                backward: false,
-                left: false,
-                right: false,
-            },
-            grab: false,
-            vsync: true,
-            last_update: now,
-            last_server_update: now,
-            time: 0.0,
-            server,
-            connection,
-            windows: DebugWindows::default(),
-            winit,
-            uuid: Uuid::nil(),
-            other_players: HashMap::new(),
-        })
-    }
-
-    fn spawn(
-        event_loop: &EventLoop,
-        winit: Address<crate::winit::Request>,
-        resolver: Resolver,
-    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
-        let (mut mailbox, address) = mailbox();
-        log::set_boxed_logger(Box::new(ApplicationLogger {
-            address: address.clone(),
-            secondary: env_logger::builder().build(),
-        }))
-        .unwrap();
-        log::set_max_level(LevelFilter::Warn);
-        let window = WindowBuilder::new()
-            .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
-            .build(event_loop)?;
-        let handle = {
-            let address = address.clone();
-            spawn(async move {
-                let mut application =
-                    match Self::new(window, winit, address.clone(), resolver).await {
-                        Ok(application) => application,
-                        Err(error) => {
-                            error!("Task failed: {:?}", error);
-                            return;
-                        }
-                    };
-                while let Some(message) = mailbox.recv().await {
-                    match application.handle(message) {
-                        Ok(ControlFlow::Continue) => {}
-                        Ok(ControlFlow::Stop) => break,
-                        Err(error) => {
-                            error!("Task failed: {:?}", error);
-                            break;
-                        }
-                    }
-                }
-                application.stop().await;
-            })
-        };
-        Ok((
-            address.filter_map(|event| match event {
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => Some(ApplicationMessage::ExitRequested),
-                    event => Some(ApplicationMessage::WindowEvent(event)),
-                },
-                Event::DeviceEvent { device_id, event } => {
-                    Some(ApplicationMessage::DeviceEvent(device_id, event))
-                }
-                Event::UserEvent(UserEvent::ScaleFactorChanged {
-                    new_inner_size,
-                    scale_factor,
-                    ..
-                }) => Some(ApplicationMessage::ScaleFactorChanged(
-                    scale_factor,
-                    new_inner_size,
-                )),
-                _ => None,
-            }),
-            handle,
-        ))
-    }
-
-    async fn stop(&mut self) {
-        if let Some(server) = self.server.as_mut() {
-            server.close();
-            let _ = server.service().stop().await;
-        }
-    }
-
-    fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
-        if let ApplicationMessage::ExitRequested = message {
-            self.winit
-                .send(crate::winit::Request::Exit)
-                .map_err(Error::Send)?;
-            return Ok(ControlFlow::Stop);
-        }
-        if self.handle_early_mouse_grab(&message).is_handled() {
-            return Ok(ControlFlow::Continue);
-        }
-        if self.context.egui.handle_event(&message).is_handled() {
-            return Ok(ControlFlow::Continue);
-        }
-        match message {
-            ApplicationMessage::Push(push) => match push {
-                Push::Setup(Setup(uuid, players, positions)) => {
-                    self.uuid = uuid;
-                    self.other_players.clear();
-                    let mut static_group = Vec::new();
-                    for pos in positions {
-                        static_group.push(Object {
-                            model: self.context.cube_model,
-                            transform: Transform {
-                                translation: Vector3::new(pos.x, pos.y, pos.z),
-                                scale: Vector3::new(0.3, 0.3, 0.3),
-                                rotation: UnitQuaternion::identity(),
-                            },
-                        });
-                    }
-                    let mut player_group = Vec::new();
-                    for (uuid, player) in players {
-                        if self.uuid != uuid {
-                            self.other_players
-                                .insert(uuid, (player.clone(), player_group.len()));
-                            player_group.push(Object {
-                                model: self.context.cube_model,
-                                transform: Transform {
-                                    translation: Vector3::new(
-                                        player.position.x,
-                                        player.position.y,
-                                        player.position.z,
-                                    ),
-                                    scale: Vector3::new(1.0, 1.0, 1.0),
-                                    rotation: UnitQuaternion::identity(),
-                                },
-                            })
-                        } else {
-                            self.context.scene.camera.translation = Translation3::new(
-                                player.position.x,
-                                player.position.y,
-                                player.position.z,
-                            );
-                        }
-                    }
-                    self.context.scene.groups.clear();
-                    self.context.scene.groups.push(static_group);
-                    self.context.scene.groups.push(player_group);
-                }
-                Push::Updates(UpdateBatch(updates, after_index)) => {
-                    for update in &updates[after_index..] {
-                        match update {
-                            Update::NewPlayer(uuid, player) => {
-                                let player_group = &mut self.context.scene.groups[1];
-                                self.other_players
-                                    .insert(*uuid, (player.clone(), player_group.len()));
-                                player_group.push(Object {
-                                    model: self.context.cube_model,
-                                    transform: Transform {
-                                        translation: Vector3::new(
-                                            player.position.x,
-                                            player.position.y,
-                                            player.position.z,
-                                        ),
-                                        scale: Vector3::new(1.0, 1.0, 1.0),
-                                        rotation: UnitQuaternion::identity(),
-                                    },
-                                })
-                            }
-                            Update::PlayerPosition(uuid, pos) => {
-                                if self.uuid != *uuid {
-                                    let player_group = &mut self.context.scene.groups[1];
-                                    let (player, index) = self.other_players.get_mut(uuid).unwrap();
-                                    player.position = *pos;
-                                    player_group[*index].transform.translation = Vector3::new(
-                                        player.position.x,
-                                        player.position.y,
-                                        player.position.z,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            ApplicationMessage::Disconnected => {
-                info!("Disconnected from server");
-                return Ok(ControlFlow::Stop);
-            }
-            ApplicationMessage::Log(level, target, args) => {
-                self.context.debug.log(level, target, args);
-            }
-            ApplicationMessage::Render => {
-                self.render()?;
-            }
-            ApplicationMessage::WindowEvent(event) => match event {
-                WindowEvent::Resized(_) => {
-                    self.recreate_swapchain()?;
-                }
-                WindowEvent::KeyboardInput {
-                    device_id: _,
-                    input,
-                    is_synthetic: _,
-                } => {
-                    if let Some(keycode) = input.virtual_keycode {
-                        match keycode {
-                            VirtualKeyCode::W => {
-                                self.control_state.forward = input.state == ElementState::Pressed;
-                            }
-
-                            VirtualKeyCode::A => {
-                                self.control_state.left = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::S => {
-                                self.control_state.backward = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::D => {
-                                self.control_state.right = input.state == ElementState::Pressed;
-                            }
-                            VirtualKeyCode::F1 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.information = !self.windows.information;
-                                }
-                            }
-                            VirtualKeyCode::F2 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.frame_times = !self.windows.frame_times;
-                                }
-                            }
-                            VirtualKeyCode::F3 => {
-                                if input.state == ElementState::Pressed {
-                                    self.windows.log = !self.windows.log;
-                                }
-                            }
-                            VirtualKeyCode::F9 => {
-                                if input.state == ElementState::Pressed {
-                                    self.vsync = !self.vsync;
-                                    self.recreate_swapchain()?;
-                                }
-                            }
-                            VirtualKeyCode::F10 => {
-                                if input.state == ElementState::Pressed {
-                                    if self.window.fullscreen().is_some() {
-                                        self.window.set_fullscreen(None);
-                                    } else {
-                                        self.window
-                                            .set_fullscreen(Some(Fullscreen::Borderless(None)));
-                                    }
-                                }
-                            }
-                            VirtualKeyCode::Escape => self.set_grab(false)?,
-                            _ => {}
-                        }
-                    }
-                }
-                WindowEvent::MouseInput { button, .. } => {
-                    if button == MouseButton::Left {
-                        self.set_grab(true)?;
-                    };
-                }
-                WindowEvent::Focused(focus) => {
-                    if !focus {
-                        self.set_grab(false)?;
-                    }
-                }
-                _ => {}
-            },
-            ApplicationMessage::DeviceEvent(_, event) => {
-                if self.grab {
-                    if let DeviceEvent::MouseMotion { delta } = event {
-                        self.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
-                        self.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
-                        self.context.scene.camera.pitch = self
-                            .context
-                            .scene
-                            .camera
-                            .pitch
-                            .clamp(-f32::pi() / 2.0, f32::pi() / 2.0);
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(ControlFlow::Continue)
-    }
-
     fn is_setup(&self) -> bool {
         !self.uuid.is_nil()
     }
@@ -443,15 +109,16 @@ impl Application {
                 self.recreate_swapchain()?;
             }
         }
-        self.address
-            .send(ApplicationMessage::Render)
-            .map_err(Error::Send)?;
         Ok(())
     }
 
-    fn handle_early_mouse_grab(&mut self, message: &ApplicationMessage) -> HandleFlow {
+    fn handle_early_mouse_grab(&mut self, event: &Event<()>) -> HandleFlow {
         if self.grab {
-            if let ApplicationMessage::WindowEvent(WindowEvent::CursorMoved { .. }) = message {
+            if let Event::WindowEvent {
+                event: WindowEvent::CursorMoved { .. },
+                ..
+            } = event
+            {
                 return HandleFlow::Handled;
             }
         }
@@ -531,6 +198,306 @@ impl Application {
     }
 }
 
+impl winit::Application for Application {
+    type Message = ApplicationMessage;
+
+    type Error = Error;
+
+    type Args = Resolver;
+
+    fn new(
+        event_loop: &EventLoop<Self::Message>,
+        runtime: &Runtime,
+        resolver: Resolver,
+    ) -> Result<Self, Self::Error> {
+        let proxy = Arc::new(Mutex::new(event_loop.create_proxy()));
+        let address =
+            Address::new(move |m| proxy.lock().unwrap().send_event(m).map_err(|e| e.into()));
+        log::set_boxed_logger(Box::new(ApplicationLogger {
+            address: address.clone(),
+            secondary: env_logger::builder().build(),
+        }))
+        .unwrap();
+        log::set_max_level(LevelFilter::Warn);
+        let window = WindowBuilder::new()
+            .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
+            .build(event_loop)?;
+        let (connection, mut mailbox, mut server) = runtime.block_on(resolver.resolve())?;
+        spawn(async move {
+            while let Some(message) = mailbox.recv().await {
+                if let Err(error) = address.send(ApplicationMessage::Push(message)) {
+                    error!("{}", error);
+                    break;
+                }
+            }
+        });
+        if let Some(server) = &mut server {
+            server.open().unwrap();
+        }
+        let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
+        let instance = Arc::new(Instance::new(
+            &CString::new("wosim").unwrap(),
+            version,
+            enumerate_required_extensions(&window)?,
+        )?);
+        let surface = instance.create_surface(|entry, instance| unsafe {
+            create_surface(entry, instance, &window, None)
+        })?;
+        let (device, render_configuration) = instance
+            .physical_devices()?
+            .into_iter()
+            .max_ok_filter_map(|physical_device| DeviceCandidate::new(physical_device, &surface))?
+            .ok_or(Error::NoSuitableDeviceFound)?
+            .create()?;
+        let device = Arc::new(device);
+        let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
+        let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
+        let renderer = Renderer::new(&device, &context, swapchain.clone())?;
+        let now = Instant::now();
+        Ok(Self {
+            renderer,
+            swapchain,
+            context,
+            device,
+            surface,
+            window,
+            control_state: ControlState {
+                forward: false,
+                backward: false,
+                left: false,
+                right: false,
+            },
+            grab: false,
+            vsync: true,
+            last_update: now,
+            last_server_update: now,
+            time: 0.0,
+            server,
+            connection,
+            windows: DebugWindows::default(),
+            uuid: Uuid::nil(),
+            other_players: HashMap::new(),
+        })
+    }
+
+    fn handle(
+        &mut self,
+        event: Event<Self::Message>,
+        _runtime: &Runtime,
+    ) -> Result<::winit::event_loop::ControlFlow, Self::Error> {
+        match event.map_nonuser_event() {
+            Ok(event) => {
+                if self.handle_early_mouse_grab(&event).is_handled() {
+                    return Ok(ControlFlow::Poll);
+                }
+                if self.context.egui.handle_event(&event).is_handled() {
+                    return Ok(ControlFlow::Poll);
+                }
+                match event {
+                    Event::NewEvents(_) => {}
+                    Event::WindowEvent { event, .. } => match event {
+                        WindowEvent::Resized(_) => {
+                            self.recreate_swapchain()?;
+                        }
+                        WindowEvent::KeyboardInput {
+                            device_id: _,
+                            input,
+                            is_synthetic: _,
+                        } => {
+                            if let Some(keycode) = input.virtual_keycode {
+                                match keycode {
+                                    VirtualKeyCode::W => {
+                                        self.control_state.forward =
+                                            input.state == ElementState::Pressed;
+                                    }
+
+                                    VirtualKeyCode::A => {
+                                        self.control_state.left =
+                                            input.state == ElementState::Pressed;
+                                    }
+                                    VirtualKeyCode::S => {
+                                        self.control_state.backward =
+                                            input.state == ElementState::Pressed;
+                                    }
+                                    VirtualKeyCode::D => {
+                                        self.control_state.right =
+                                            input.state == ElementState::Pressed;
+                                    }
+                                    VirtualKeyCode::F1 => {
+                                        if input.state == ElementState::Pressed {
+                                            self.windows.information = !self.windows.information;
+                                        }
+                                    }
+                                    VirtualKeyCode::F2 => {
+                                        if input.state == ElementState::Pressed {
+                                            self.windows.frame_times = !self.windows.frame_times;
+                                        }
+                                    }
+                                    VirtualKeyCode::F3 => {
+                                        if input.state == ElementState::Pressed {
+                                            self.windows.log = !self.windows.log;
+                                        }
+                                    }
+                                    VirtualKeyCode::F9 => {
+                                        if input.state == ElementState::Pressed {
+                                            self.vsync = !self.vsync;
+                                            self.recreate_swapchain()?;
+                                        }
+                                    }
+                                    VirtualKeyCode::F10 => {
+                                        if input.state == ElementState::Pressed {
+                                            if self.window.fullscreen().is_some() {
+                                                self.window.set_fullscreen(None);
+                                            } else {
+                                                self.window.set_fullscreen(Some(
+                                                    Fullscreen::Borderless(None),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    VirtualKeyCode::Escape => self.set_grab(false)?,
+                                    _ => {}
+                                }
+                            }
+                        }
+                        WindowEvent::MouseInput { button, .. } => {
+                            if button == MouseButton::Left {
+                                self.set_grab(true)?;
+                            };
+                        }
+                        WindowEvent::Focused(focus) => {
+                            if !focus {
+                                self.set_grab(false)?;
+                            }
+                        }
+                        WindowEvent::CloseRequested => return Ok(ControlFlow::Exit),
+                        _ => {}
+                    },
+                    Event::DeviceEvent { event, .. } => {
+                        if self.grab {
+                            if let DeviceEvent::MouseMotion { delta } = event {
+                                self.context.scene.camera.yaw += -0.0008 * delta.0 as f32;
+                                self.context.scene.camera.pitch += -0.0008 * delta.1 as f32;
+                                self.context.scene.camera.pitch = self
+                                    .context
+                                    .scene
+                                    .camera
+                                    .pitch
+                                    .clamp(-f32::pi() / 2.0, f32::pi() / 2.0);
+                            }
+                        }
+                    }
+                    Event::MainEventsCleared => self.render()?,
+                    _ => {}
+                }
+            }
+            Err(event) => {
+                if let Event::UserEvent(message) = event {
+                    match message {
+                        ApplicationMessage::Push(push) => match push {
+                            Push::Setup(Setup(uuid, players, positions)) => {
+                                self.uuid = uuid;
+                                self.other_players.clear();
+                                let mut static_group = Vec::new();
+                                for pos in positions {
+                                    static_group.push(Object {
+                                        model: self.context.cube_model,
+                                        transform: Transform {
+                                            translation: Vector3::new(pos.x, pos.y, pos.z),
+                                            scale: Vector3::new(0.3, 0.3, 0.3),
+                                            rotation: UnitQuaternion::identity(),
+                                        },
+                                    });
+                                }
+                                let mut player_group = Vec::new();
+                                for (uuid, player) in players {
+                                    if self.uuid != uuid {
+                                        self.other_players
+                                            .insert(uuid, (player.clone(), player_group.len()));
+                                        player_group.push(Object {
+                                            model: self.context.cube_model,
+                                            transform: Transform {
+                                                translation: Vector3::new(
+                                                    player.position.x,
+                                                    player.position.y,
+                                                    player.position.z,
+                                                ),
+                                                scale: Vector3::new(1.0, 1.0, 1.0),
+                                                rotation: UnitQuaternion::identity(),
+                                            },
+                                        })
+                                    } else {
+                                        self.context.scene.camera.translation = Translation3::new(
+                                            player.position.x,
+                                            player.position.y,
+                                            player.position.z,
+                                        );
+                                    }
+                                }
+                                self.context.scene.groups.clear();
+                                self.context.scene.groups.push(static_group);
+                                self.context.scene.groups.push(player_group);
+                            }
+                            Push::Updates(UpdateBatch(updates, after_index)) => {
+                                for update in &updates[after_index..] {
+                                    match update {
+                                        Update::NewPlayer(uuid, player) => {
+                                            let player_group = &mut self.context.scene.groups[1];
+                                            self.other_players.insert(
+                                                *uuid,
+                                                (player.clone(), player_group.len()),
+                                            );
+                                            player_group.push(Object {
+                                                model: self.context.cube_model,
+                                                transform: Transform {
+                                                    translation: Vector3::new(
+                                                        player.position.x,
+                                                        player.position.y,
+                                                        player.position.z,
+                                                    ),
+                                                    scale: Vector3::new(1.0, 1.0, 1.0),
+                                                    rotation: UnitQuaternion::identity(),
+                                                },
+                                            })
+                                        }
+                                        Update::PlayerPosition(uuid, pos) => {
+                                            if self.uuid != *uuid {
+                                                let player_group =
+                                                    &mut self.context.scene.groups[1];
+                                                let (player, index) =
+                                                    self.other_players.get_mut(uuid).unwrap();
+                                                player.position = *pos;
+                                                player_group[*index].transform.translation =
+                                                    Vector3::new(
+                                                        player.position.x,
+                                                        player.position.y,
+                                                        player.position.z,
+                                                    );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        ApplicationMessage::Log(level, target, args) => {
+                            self.context.debug.log(level, target, args);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(ControlFlow::Poll)
+    }
+
+    fn shutdown(&mut self, runtime: &Runtime) {
+        if let Some(server) = self.server.as_mut() {
+            server.close();
+            let _ = runtime.block_on(server.service().stop());
+        }
+    }
+}
+
 impl Drop for Application {
     fn drop(&mut self) {
         self.device.wait_idle().unwrap()
@@ -540,13 +507,7 @@ impl Drop for Application {
 #[derive(Debug)]
 pub enum ApplicationMessage {
     Push(Push),
-    Render,
-    Disconnected,
     Log(Level, String, String),
-    ScaleFactorChanged(f64, PhysicalSize<u32>),
-    ExitRequested,
-    WindowEvent(WindowEvent<'static>),
-    DeviceEvent(DeviceId, DeviceEvent),
 }
 
 struct ApplicationLogger {
@@ -654,21 +615,20 @@ impl Command {
                 port,
                 token,
                 skip_verification,
-            } => run(
+            } => run::<Application>(
                 Runtime::new()?,
-                Self::spawn(Resolver::Remote {
+                Resolver::Remote {
                     hostname,
                     port,
                     token,
                     skip_verification,
-                }),
+                },
             ),
-            Command::Create { token, port } => run(
-                Runtime::new()?,
-                Self::spawn(Resolver::Create { token, port }),
-            ),
+            Command::Create { token, port } => {
+                run::<Application>(Runtime::new()?, Resolver::Create { token, port })
+            }
             Command::Play { token, port } => {
-                run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
+                run::<Application>(Runtime::new()?, Resolver::Open { token, port })
             }
             Command::Info => Ok(to_writer(
                 stdout(),
@@ -692,36 +652,24 @@ impl Command {
                 let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
                 match command {
                     DebugCommand::Play { port } => {
-                        run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
+                        run::<Application>(Runtime::new()?, Resolver::Open { token, port })
                     }
                     DebugCommand::Create { port } => {
                         std::fs::remove_file("world.db")?;
-                        run(
-                            Runtime::new()?,
-                            Self::spawn(Resolver::Create { token, port }),
-                        )
+                        run::<Application>(Runtime::new()?, Resolver::Create { token, port })
                     }
-                    DebugCommand::Join { hostname, port } => run(
+                    DebugCommand::Join { hostname, port } => run::<Application>(
                         Runtime::new()?,
-                        Self::spawn(Resolver::Remote {
+                        Resolver::Remote {
                             hostname,
                             port,
                             token,
                             skip_verification: true,
-                        }),
+                        },
                     ),
                 }
             }
         }
-    }
-
-    fn spawn(
-        resolver: Resolver,
-    ) -> impl FnOnce(
-        &EventLoop,
-        Address<winit::Request>,
-    ) -> Result<(Address<Event>, JoinHandle<()>), Error> {
-        move |event_loop, winit| Application::spawn(event_loop, winit, resolver)
     }
 }
 

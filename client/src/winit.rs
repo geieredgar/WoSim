@@ -1,114 +1,66 @@
-use std::{error::Error, process::exit, sync::Mutex};
+use std::{error::Error, process::exit};
 
-use actor::Address;
 use log::error;
-use tokio::{runtime::Runtime, task::JoinHandle};
-use winit::{dpi::PhysicalSize, event::WindowEvent, event_loop::ControlFlow, window::WindowId};
+use tokio::runtime::Runtime;
+use winit::{
+    event::Event,
+    event_loop::{ControlFlow, EventLoop},
+};
 
-pub type EventLoop = winit::event_loop::EventLoop<Request>;
+pub trait Application: Sized + 'static {
+    type Message: 'static;
+    type Error: Error;
+    type Args;
 
-pub type Event = winit::event::Event<'static, UserEvent>;
+    fn new(
+        event_loop: &EventLoop<Self::Message>,
+        runtime: &Runtime,
+        args: Self::Args,
+    ) -> Result<Self, Self::Error>;
 
-type InternalEvent<'a> = winit::event::Event<'a, Request>;
+    fn handle(
+        &mut self,
+        event: Event<Self::Message>,
+        runtime: &Runtime,
+    ) -> Result<ControlFlow, Self::Error>;
 
-#[derive(Debug)]
-pub enum Request {
-    Exit,
+    fn shutdown(&mut self, runtime: &Runtime);
 }
 
-#[derive(Debug)]
-pub enum UserEvent {
-    ScaleFactorChanged {
-        window_id: WindowId,
-        scale_factor: f64,
-        new_inner_size: PhysicalSize<u32>,
-    },
-}
-
-struct EventHandlerState {
-    address: Option<Address<Event>>,
-    handle: Option<JoinHandle<()>>,
+struct Handler<A: Application> {
+    application: A,
     runtime: Runtime,
 }
 
-impl EventHandlerState {
-    fn address(&self) -> &Address<Event> {
-        self.address.as_ref().unwrap()
-    }
-}
-
-impl Drop for EventHandlerState {
+impl<A: Application> Drop for Handler<A> {
     fn drop(&mut self) {
-        drop(self.address.take());
-        self.runtime.block_on(self.handle.take().unwrap()).unwrap();
+        self.application.shutdown(&self.runtime)
     }
 }
 
-pub fn run<
-    F: FnOnce(&EventLoop, Address<Request>) -> Result<(Address<Event>, JoinHandle<()>), E>,
-    E: Error,
->(
-    runtime: Runtime,
-    factory: F,
-) -> ! {
+pub fn run<A: Application>(runtime: Runtime, args: A::Args) -> ! {
     let event_loop = EventLoop::with_user_event();
-    let proxy = Mutex::new(event_loop.create_proxy());
-    let address = Address::new(move |message| {
-        proxy
-            .lock()
-            .unwrap()
-            .send_event(message)
-            .map_err(|e| e.into())
-    });
     let guard = runtime.enter();
-    let (address, handle) = match factory(&event_loop, address) {
-        Ok((address, handle)) => (Some(address), Some(handle)),
+    let application = match A::new(&event_loop, &runtime, args) {
+        Ok(application) => application,
         Err(error) => {
             log::error!("Failed to setup application: {}", error);
             exit(1);
         }
     };
     drop(guard);
-    let state = EventHandlerState {
-        address,
-        handle,
+    let mut state = Handler {
+        application,
         runtime,
     };
     event_loop.run(move |event, _, control_flow| {
         let _guard = state.runtime.enter();
-        if let InternalEvent::UserEvent(Request::Exit) = &event {
-            *control_flow = ControlFlow::Exit;
-            return;
-        }
-        if let Some(event) = map(event) {
-            match state.address().send(event) {
-                Ok(_) => {}
-                Err(error) => {
-                    error!("{}", error);
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
+        match state.application.handle(event, &state.runtime) {
+            Ok(flow) => *control_flow = flow,
+            Err(error) => {
+                error!("{}", error);
+                *control_flow = ControlFlow::Exit;
             }
         }
-        *control_flow = ControlFlow::Wait;
     })
-}
-
-fn map(event: InternalEvent<'_>) -> Option<Event> {
-    if let InternalEvent::WindowEvent {
-        window_id,
-        event:
-            WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                new_inner_size,
-            },
-    } = &event
-    {
-        return Some(Event::UserEvent(UserEvent::ScaleFactorChanged {
-            window_id: *window_id,
-            scale_factor: *scale_factor,
-            new_inner_size: **new_inner_size,
-        }));
-    }
-    event.to_static()?.map_nonuser_event().ok()
 }
