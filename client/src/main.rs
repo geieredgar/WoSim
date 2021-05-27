@@ -730,7 +730,7 @@ fn setup_env() {}
 
 #[cfg(target_os = "macos")]
 fn setup_env() {
-    set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
+    std::env::set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
 }
 
 fn main() -> Result<(), Error> {
