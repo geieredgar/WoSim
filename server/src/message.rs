@@ -6,15 +6,18 @@ use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
-    state::{Position, Update},
+    state::{Orientation, Position, Update},
     Player, User,
 };
 
 #[derive(Debug)]
 pub enum Request {
-    UpdatePosition(Position),
+    UpdateSelf(SelfUpdate),
     Shutdown,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SelfUpdate(pub Position, pub Orientation);
 
 #[derive(Debug)]
 pub(crate) enum ServerMessage {
@@ -28,14 +31,14 @@ pub(crate) enum ServerMessage {
 impl Message for Request {
     fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
         match self {
-            Request::UpdatePosition(position) => Ok(OutgoingMessage::datagram(1, position)?),
+            Request::UpdateSelf(value) => Ok(OutgoingMessage::datagram(1, value)?),
             Request::Shutdown => Ok(OutgoingMessage::uni(2, ())?),
         }
     }
 
     fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
         match message.id() {
-            1 => Ok(Self::UpdatePosition(message.value()?)),
+            1 => Ok(Self::UpdateSelf(message.value()?)),
             2 => Ok(Self::Shutdown),
             _ => message.invalid_id(),
         }

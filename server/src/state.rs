@@ -32,6 +32,14 @@ pub struct Position {
     pub z: f32,
 }
 
+#[derive(Clone, Copy, Debug, Pod, Zeroable, Serialize, Deserialize)]
+#[repr(C)]
+pub struct Orientation {
+    pub roll: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+}
+
 pub struct World {
     pub positions: db::Vec<Position>,
     pub players: HashMap<Uuid, Player>,
@@ -40,12 +48,13 @@ pub struct World {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Player {
     pub position: Position,
+    pub orientation: Orientation,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Update {
     NewPlayer(Uuid, Player),
-    PlayerPosition(Uuid, Position),
+    Player(Uuid, Position, Orientation),
 }
 
 impl World {
@@ -83,15 +92,28 @@ impl World {
                     y: 0.0,
                     z: 0.0,
                 },
+                orientation: Orientation {
+                    roll: 0.0,
+                    pitch: 0.0,
+                    yaw: 0.0,
+                },
             };
             entry.insert(player.clone());
             updates.push(Update::NewPlayer(uuid, player));
         }
     }
 
-    pub fn update_player_position(&mut self, uuid: Uuid, pos: Position, updates: &mut Vec<Update>) {
-        self.players.get_mut(&uuid).unwrap().position = pos;
-        updates.push(Update::PlayerPosition(uuid, pos))
+    pub fn update_player(
+        &mut self,
+        uuid: Uuid,
+        pos: Position,
+        orientation: Orientation,
+        updates: &mut Vec<Update>,
+    ) {
+        let player = self.players.get_mut(&uuid).unwrap();
+        player.position = pos;
+        player.orientation = orientation;
+        updates.push(Update::Player(uuid, pos, orientation))
     }
 }
 

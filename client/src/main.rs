@@ -21,6 +21,7 @@ use error::Error;
 use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::Level;
 use log::{error, LevelFilter, Log};
+use nalgebra::Rotation3;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use net::Server;
 use renderer::Renderer;
@@ -28,6 +29,8 @@ use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
 use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
+use server::Orientation;
+use server::SelfUpdate;
 use server::{
     Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
 };
@@ -168,11 +171,18 @@ impl Application {
             let _ = self
                 .connection
                 .asynchronous()
-                .send(Request::UpdatePosition(Position {
-                    x: self.context.scene.camera.translation.vector[0],
-                    y: self.context.scene.camera.translation.vector[1],
-                    z: self.context.scene.camera.translation.vector[2],
-                }));
+                .send(Request::UpdateSelf(SelfUpdate(
+                    Position {
+                        x: self.context.scene.camera.translation.vector[0],
+                        y: self.context.scene.camera.translation.vector[1],
+                        z: self.context.scene.camera.translation.vector[2],
+                    },
+                    Orientation {
+                        roll: self.context.scene.camera.roll,
+                        pitch: self.context.scene.camera.pitch,
+                        yaw: self.context.scene.camera.yaw,
+                    },
+                )));
         }
     }
 
@@ -462,13 +472,25 @@ impl winit::Application for Application {
                                                 },
                                             })
                                         }
-                                        Update::PlayerPosition(uuid, pos) => {
+                                        Update::Player(uuid, pos, orientation) => {
                                             if self.uuid != *uuid {
                                                 let player_group =
                                                     &mut self.context.scene.groups[1];
                                                 let (player, index) =
                                                     self.other_players.get_mut(uuid).unwrap();
                                                 player.position = *pos;
+                                                player_group[*index].transform.rotation =
+                                                    (Rotation3::from_axis_angle(
+                                                        &Vector3::y_axis(),
+                                                        orientation.yaw,
+                                                    ) * Rotation3::from_axis_angle(
+                                                        &Vector3::x_axis(),
+                                                        orientation.pitch,
+                                                    ) * Rotation3::from_axis_angle(
+                                                        &Vector3::z_axis(),
+                                                        orientation.roll,
+                                                    ))
+                                                    .into();
                                                 player_group[*index].transform.translation =
                                                     Vector3::new(
                                                         player.position.x,

@@ -14,6 +14,7 @@ pub use error::*;
 pub(self) use handle::handle;
 pub use message::*;
 pub use service::*;
+pub use state::Orientation;
 pub use state::Player;
 pub use state::Position;
 pub(self) use state::State;

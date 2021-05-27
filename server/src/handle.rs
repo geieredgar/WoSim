@@ -3,7 +3,7 @@ use std::{mem::swap, sync::Arc};
 use actor::ControlFlow;
 use log::info;
 
-use crate::{state::Observer, Push, ServerMessage, Setup, State, UpdateBatch, World};
+use crate::{state::Observer, Push, SelfUpdate, ServerMessage, Setup, State, UpdateBatch, World};
 
 pub(super) async fn handle(state: &mut State, message: ServerMessage) -> ControlFlow {
     match message {
@@ -45,9 +45,9 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             }
         }
         ServerMessage::Request(user, request) => match request {
-            crate::Request::UpdatePosition(pos) => {
+            crate::Request::UpdateSelf(SelfUpdate(pos, orientation)) => {
                 let world: &mut World = &mut state.database;
-                world.update_player_position(user.uuid, pos, &mut state.updates)
+                world.update_player(user.uuid, pos, orientation, &mut state.updates)
             }
             crate::Request::Shutdown => panic!(),
         },
