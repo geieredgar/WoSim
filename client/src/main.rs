@@ -499,7 +499,7 @@ impl Application {
             self.last_server_update = now;
             let _ = self
                 .connection
-                .parallel()
+                .asynchronous()
                 .send(Request::UpdatePosition(Position {
                     x: self.context.scene.camera.translation.vector[0],
                     y: self.context.scene.camera.translation.vector[1],
