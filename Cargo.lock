@@ -3817,6 +3817,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
  "getrandom 0.2.2",
+ "serde",
 ]
 
 [[package]]
@@ -4125,6 +4126,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whoami"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4abacf325c958dfeaf1046931d37f2a901b6dfe0968ee965a29e94c6766b2af6"
+dependencies = [
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "wide"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4337,7 +4348,10 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "toml",
+ "uuid",
  "webbrowser",
+ "whoami",
  "wosim-interop",
 ]
 

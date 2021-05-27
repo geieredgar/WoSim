@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, read_to_string, OpenOptions},
     io,
     path::is_separator,
 };
@@ -13,6 +13,7 @@ use log::error;
 use tokio::process;
 
 use crate::{
+    configuration::Configuration,
     installation::Installation,
     message::Message,
     scan::scan_dir,
@@ -28,6 +29,7 @@ use super::{
 
 pub struct RootComponent {
     proj_dirs: ProjectDirs,
+    _configuration: Configuration,
     worlds: Vec<WorldComponent>,
     installations: Vec<Installation>,
     local_servers: Vec<ServerComponent>,
@@ -307,18 +309,45 @@ impl RootComponent {
     pub fn is_visible(&self) -> bool {
         self.visible
     }
+
+    pub fn save_configuration_to_dirs(configuration: &Configuration, proj_dirs: &ProjectDirs) {
+        let contents = match toml::to_string(configuration) {
+            Ok(content) => content,
+            Err(error) => {
+                error!("{}", error);
+                return;
+            }
+        };
+        if let Err(error) = fs::create_dir_all(proj_dirs.config_dir()) {
+            error!("{}", error);
+            return;
+        }
+        if let Err(error) = fs::write(proj_dirs.config_dir().join("config.toml"), contents) {
+            error!("{}", error);
+        }
+    }
 }
 
 impl Default for RootComponent {
     fn default() -> Self {
         let proj_dirs =
             ProjectDirs::from("", "", "wosim").expect("could not determine home directory");
+        let _configuration = read_to_string(proj_dirs.config_dir().join("config.toml"))
+            .ok()
+            .map(|s| toml::from_str(&s).ok())
+            .flatten()
+            .unwrap_or_else(|| {
+                let configuration = Default::default();
+                Self::save_configuration_to_dirs(&configuration, &proj_dirs);
+                configuration
+            });
         let worlds = scan_dir(proj_dirs.data_dir().join("worlds"), |path, info| {
             WorldComponent::new(World { path, info })
         });
         let versions = Installation::scan_current_dir();
         Self {
             proj_dirs,
+            _configuration,
             worlds,
             installations: versions,
             theme: Theme::Dark,
