@@ -23,7 +23,7 @@ pub enum Connection<M: Message + 'static> {
 }
 
 impl<M: Message> Connection<M> {
-    pub fn sequential(&self) -> Address<M> {
+    pub fn parallel(&self) -> Address<M> {
         match self {
             Connection::Local(address) => address.clone(),
             Connection::Remote(connection) => {
@@ -41,7 +41,7 @@ impl<M: Message> Connection<M> {
         }
     }
 
-    pub fn parallel(&self) -> Address<M> {
+    pub fn sequential(&self) -> Address<M> {
         match self {
             Connection::Local(address) => address.clone(),
             Connection::Remote(connection) => {
