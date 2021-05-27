@@ -32,7 +32,7 @@ use server::{
     Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
 };
 use structopt::StructOpt;
-use tokio::{runtime::Runtime, spawn};
+use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 use uuid::Uuid;
 
@@ -69,6 +69,7 @@ struct Application {
     windows: DebugWindows,
     uuid: Uuid,
     other_players: HashMap<Uuid, (Player, usize)>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl Application {
@@ -223,7 +224,7 @@ impl winit::Application for Application {
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
         let (connection, mut mailbox, mut server) = runtime.block_on(resolver.resolve())?;
-        spawn(async move {
+        let handle = spawn(async move {
             while let Some(message) = mailbox.recv().await {
                 if let Err(error) = address.send(ApplicationMessage::Push(message)) {
                     error!("{}", error);
@@ -277,6 +278,7 @@ impl winit::Application for Application {
             windows: DebugWindows::default(),
             uuid: Uuid::nil(),
             other_players: HashMap::new(),
+            handle: Some(handle),
         })
     }
 
@@ -491,9 +493,17 @@ impl winit::Application for Application {
     }
 
     fn shutdown(&mut self, runtime: &Runtime) {
+        if let Err(error) = self.connection.asynchronous().send(Request::Shutdown) {
+            error!("{}", error)
+        }
+        if let Err(error) = runtime.block_on(self.handle.take().unwrap()) {
+            error!("{}", error)
+        }
         if let Some(server) = self.server.as_mut() {
             server.close();
-            let _ = runtime.block_on(server.service().stop());
+            if let Err(error) = runtime.block_on(server.service().stop()) {
+                error!("{}", error)
+            }
         }
     }
 }
