@@ -85,9 +85,7 @@ impl Application {
             self.update();
             self.context.debug.begin_frame();
             let ctx = self.context.egui.begin();
-            self.context
-                .debug
-                .render(&ctx, &mut self.windows, &self.connection);
+            self.context.debug.render(&ctx, &mut self.windows);
             self.context
                 .egui
                 .end(if self.grab { None } else { Some(&self.window) })?;
@@ -108,7 +106,7 @@ impl Application {
                     _ => return Err(err),
                 },
             };
-            self.context.debug.end_frame(timestamps);
+            self.context.debug.end_frame(timestamps, &self.connection);
             if resize {
                 self.recreate_swapchain()?;
             }

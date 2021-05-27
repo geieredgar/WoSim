@@ -1,4 +1,4 @@
-use std::{error::Error as StdError, fmt::Display, sync::Arc, time::Duration};
+use std::{error::Error as StdError, fmt::Display, sync::Arc};
 
 use actor::Address;
 use bytes::{Buf, Bytes, BytesMut};
@@ -13,6 +13,8 @@ use tokio::{
         oneshot::Sender,
     },
 };
+
+pub use quinn_proto::ConnectionStats;
 
 use crate::{Message, RecvError, RecvQueue, SendError};
 
@@ -69,10 +71,10 @@ impl<M: Message> Connection<M> {
         }
     }
 
-    pub fn rtt(&self) -> Duration {
+    pub fn stats(&self) -> Option<ConnectionStats> {
         match self {
-            Connection::Local(_) => Duration::from_secs(0),
-            Connection::Remote(connection) => connection.inner.rtt(),
+            Connection::Local(_) => None,
+            Connection::Remote(connection) => Some(connection.inner.stats()),
         }
     }
 }
@@ -100,6 +102,36 @@ impl Drop for AutoCloser {
     fn drop(&mut self) {
         self.0.close(VarInt::from_u32(0), &[]);
     }
+}
+
+#[derive(Default)]
+pub struct ConnectionStatsDiff {
+    pub tx: UdpStatsDiff,
+    pub rx: UdpStatsDiff,
+}
+
+impl ConnectionStatsDiff {
+    pub fn new(from: ConnectionStats, to: ConnectionStats) -> Self {
+        Self {
+            tx: UdpStatsDiff {
+                datagrams: to.udp_tx.datagrams - from.udp_tx.datagrams,
+                bytes: to.udp_tx.bytes - from.udp_tx.bytes,
+                transmits: to.udp_tx.transmits - from.udp_tx.transmits,
+            },
+            rx: UdpStatsDiff {
+                datagrams: to.udp_rx.datagrams - from.udp_rx.datagrams,
+                bytes: to.udp_rx.bytes - from.udp_rx.bytes,
+                transmits: to.udp_rx.transmits - from.udp_rx.transmits,
+            },
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct UdpStatsDiff {
+    pub datagrams: u64,
+    pub bytes: u64,
+    pub transmits: u64,
 }
 
 #[derive(Debug)]

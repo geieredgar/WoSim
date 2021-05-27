@@ -19,4 +19,5 @@ serde = "1.0.125"
 tokio = { version = "1.6.0", features = ["rt", "io-util"] }
 util = { path = "../util", package = "wosim-util" }
 quinn = "0.7.2"
+quinn-proto = "0.7.2"
 webpki = "0.21"
