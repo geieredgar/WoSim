@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 
-use vulkan::{Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE};
+use vulkan::{
+    CommandBuffer, CommandBufferLevel, CommandPool, CommandPoolCreateFlags, DescriptorPool,
+    DescriptorPoolSetup, Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE,
+};
 
 use crate::{
     cull::CullContext,
@@ -10,6 +13,7 @@ use crate::{
     depth::DepthContext,
     egui::EguiContext,
     error::Error,
+    frame::Frame,
     renderer::RenderConfiguration,
     scene::{Camera, MeshData, Model, Object, SceneContext, Sphere, Transform, Vertex},
 };
@@ -23,6 +27,9 @@ pub struct Context {
     pub configuration: RenderConfiguration,
     pub egui: EguiContext,
     pub debug: DebugContext,
+    pub descriptor_pool: DescriptorPool,
+    pub command_pool: CommandPool,
+    pub command_buffer: CommandBuffer,
 }
 
 impl Context {
@@ -114,7 +121,15 @@ impl Context {
             }
         }
         scene.flush()?;
-        let depth = DepthContext::new(device, &pipeline_cache)?;
+        let command_pool = device.create_command_pool(
+            CommandPoolCreateFlags::TRANSIENT,
+            device.main_queue_family_index(),
+        )?;
+        let mut command_buffers = command_pool.allocate(CommandBufferLevel::PRIMARY, 1)?;
+        let command_buffer = command_buffers.remove(0);
+        let descriptor_pool =
+            (Context::pool_setup() + Frame::pool_setup() * 2).create_pool(device)?;
+        let depth = DepthContext::new(device, &pipeline_cache, &descriptor_pool)?;
         let cull = CullContext::new(
             device,
             if configuration.use_draw_count {
@@ -133,6 +148,13 @@ impl Context {
             configuration,
             egui,
             debug,
+            descriptor_pool,
+            command_pool,
+            command_buffer,
         })
+    }
+
+    pub fn pool_setup() -> DescriptorPoolSetup {
+        DepthContext::pool_setup()
     }
 }

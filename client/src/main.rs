@@ -233,7 +233,7 @@ impl Application {
             }
             ApplicationMessage::WindowEvent(event) => match event {
                 WindowEvent::Resized(_) => {
-                    self.recreate_renderer()?;
+                    self.recreate_swapchain()?;
                 }
                 WindowEvent::KeyboardInput {
                     device_id: _,
@@ -273,7 +273,7 @@ impl Application {
                             VirtualKeyCode::F9 => {
                                 if input.state == ElementState::Pressed {
                                     self.vsync = !self.vsync;
-                                    self.recreate_renderer()?;
+                                    self.recreate_swapchain()?;
                                 }
                             }
                             VirtualKeyCode::F10 => {
@@ -351,7 +351,7 @@ impl Application {
         };
         self.context.debug.end_frame(timestamps);
         if resize {
-            self.recreate_renderer()?;
+            self.recreate_swapchain()?;
         }
         self.address
             .send(ApplicationMessage::Render)
@@ -368,7 +368,7 @@ impl Application {
         HandleFlow::Unhandled
     }
 
-    fn recreate_renderer(&mut self) -> Result<(), Error> {
+    fn recreate_swapchain(&mut self) -> Result<(), Error> {
         self.device.wait_idle()?;
         self.swapchain = Arc::new(create_swapchain(
             &self.device,
@@ -377,7 +377,8 @@ impl Application {
             self.vsync,
             Some(&self.swapchain),
         )?);
-        self.renderer = Renderer::new(&self.device, &self.context, self.swapchain.clone())?;
+        self.renderer
+            .recreate_view(&self.device, &self.context, self.swapchain.clone())?;
         Ok(())
     }
 

@@ -6,7 +6,7 @@ use vulkan::{
 };
 
 use crate::{
-    depth::{DepthFrame, DepthView},
+    depth::DepthView,
     scene::{SceneContext, SceneFrame},
 };
 
@@ -20,8 +20,6 @@ impl CullFrame {
     pub fn new(
         device: &Arc<Device>,
         context: &CullContext,
-        depth_view: &DepthView,
-        depth_frame: &DepthFrame,
         scene_context: &SceneContext,
         scene_frame: &SceneFrame,
         descriptor_pool: &DescriptorPool,
@@ -58,11 +56,6 @@ impl CullFrame {
             .range(WHOLE_SIZE)
             .buffer(*scene_frame.draw_data)
             .build()];
-        let image_info = [DescriptorImageInfo::builder()
-            .sampler(*depth_view.sampler)
-            .image_view(*depth_frame.pyramid_view)
-            .image_layout(ImageLayout::GENERAL)
-            .build()];
         let descriptor_writes = [
             WriteDescriptorSet::builder()
                 .dst_set(*descriptor_set)
@@ -70,13 +63,6 @@ impl CullFrame {
                 .dst_array_element(0)
                 .descriptor_type(DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(&constants_buffer_info)
-                .build(),
-            WriteDescriptorSet::builder()
-                .dst_set(*descriptor_set)
-                .dst_binding(1)
-                .dst_array_element(0)
-                .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .image_info(&image_info)
                 .build(),
             WriteDescriptorSet::builder()
                 .dst_set(*descriptor_set)
@@ -116,6 +102,22 @@ impl CullFrame {
         ];
         device.update_descriptor_sets(&descriptor_writes, &[]);
         Ok(Self { descriptor_set })
+    }
+
+    pub fn setup_view(&mut self, device: &Arc<Device>, depth_view: &DepthView) {
+        let image_info = [DescriptorImageInfo::builder()
+            .sampler(*depth_view.sampler)
+            .image_view(*depth_view.pyramid_view)
+            .image_layout(ImageLayout::GENERAL)
+            .build()];
+        let descriptor_writes = [WriteDescriptorSet::builder()
+            .dst_set(*self.descriptor_set)
+            .dst_binding(1)
+            .dst_array_element(0)
+            .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .image_info(&image_info)
+            .build()];
+        device.update_descriptor_sets(&descriptor_writes, &[]);
     }
 
     pub fn pool_setup() -> DescriptorPoolSetup {
