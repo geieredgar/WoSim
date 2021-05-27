@@ -12,7 +12,7 @@ use quinn::{
 };
 use tokio::spawn;
 
-use crate::{session, AuthToken, Connection, Server, Service, Verification};
+use crate::{session, AuthToken, Connection, RemoteConnection, Server, Service, Verification};
 
 pub enum Resolver<S: Service> {
     Local {
@@ -119,7 +119,11 @@ impl<S: Service> Resolver<S> {
                     .map_err(ResolveError::FinishTokenStream)?;
                 let (mailbox, client) = mailbox();
                 spawn(session(bi_streams, uni_streams, datagrams, client));
-                Ok((Connection::Remote(connection), mailbox, None))
+                Ok((
+                    Connection::Remote(RemoteConnection::new(connection)),
+                    mailbox,
+                    None,
+                ))
             }
         }
     }
