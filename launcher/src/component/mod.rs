@@ -20,7 +20,10 @@ use crate::{
     theme::Theme,
 };
 
-pub fn page<'a>(content: impl Into<Element<'a, Message>>, theme: Theme) -> Container<'a, Message> {
+pub fn fluid_page<'a>(
+    content: impl Into<Element<'a, Message>>,
+    theme: Theme,
+) -> Container<'a, Message> {
     Container::new(content)
         .width(Length::Fill)
         .height(Length::Fill)

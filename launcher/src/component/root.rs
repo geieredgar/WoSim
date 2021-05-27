@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    header, page, CreateWorldComponent, DeleteWorldComponent, ServerComponent, WorldComponent,
+    fluid_page, header, CreateWorldComponent, DeleteWorldComponent, ServerComponent, WorldComponent,
 };
 
 pub struct RootComponent {
@@ -299,7 +299,7 @@ impl RootComponent {
                 ServerTab::Join => column,
             },
         };
-        page(column, theme)
+        fluid_page(column, theme)
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
