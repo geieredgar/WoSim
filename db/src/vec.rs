@@ -179,6 +179,10 @@ impl<'a, T: Pod, H: DerefMut<Target = VecHeader>> IndexMut<usize> for VecGuard<'
 
 pub trait Len {
     fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub struct Iter<'a, T> {

@@ -15,18 +15,31 @@ pub use world::*;
 use iced::{Align, Container, Element, Length, Row, Space, Text};
 
 use crate::{
-    icon::Icon,
     message::Message,
-    style::{BackgroundContainer, ForegroundContainer},
+    style::{BackgroundContainer, ForegroundContainer, LogoContainer},
     theme::Theme,
 };
 
-pub fn page<'a>(content: impl Into<Element<'a, Message>>, theme: Theme) -> Container<'a, Message> {
+pub fn fluid_page<'a>(
+    content: impl Into<Element<'a, Message>>,
+    theme: Theme,
+) -> Container<'a, Message> {
     Container::new(content)
         .width(Length::Fill)
         .height(Length::Fill)
         .center_x()
         .style(BackgroundContainer(theme))
+}
+
+pub fn page<'a>(content: impl Into<Element<'a, Message>>, theme: Theme) -> Container<'a, Message> {
+    fluid_page(
+        Container::new(content)
+            .width(Length::Fill)
+            .max_width(600)
+            .height(Length::Fill)
+            .center_x(),
+        theme,
+    )
 }
 
 pub fn header<'a>(
@@ -35,13 +48,20 @@ pub fn header<'a>(
 ) -> Container<'a, Message> {
     Container::new(
         Row::new()
-            .push(Icon::Joystick.svg(theme.colors().primary.bright, 32, 32))
             .push(
-                Text::new("WoSim")
-                    .size(30)
-                    .color(theme.colors().primary.bright),
+                Container::new(Text::new("Wo").size(30).color(theme.colors().background))
+                    .padding(3)
+                    .style(LogoContainer(theme)),
             )
-            .push(Space::with_width(Length::Units(10)))
+            .push(
+                Container::new(
+                    Text::new("Sim")
+                        .size(30)
+                        .color(theme.colors().primary.bright),
+                )
+                .padding(2),
+            )
+            .push(Space::with_width(Length::Units(20)))
             .push(content)
             .align_items(Align::Center)
             .width(Length::Fill),

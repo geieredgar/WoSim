@@ -1,7 +1,9 @@
+use std::{mem::swap, sync::Arc};
+
 use actor::ControlFlow;
 use log::info;
 
-use crate::{Push, ServerMessage, State, World};
+use crate::{state::Observer, Push, ServerMessage, Setup, State, UpdateBatch, World};
 
 pub(super) async fn handle(state: &mut State, message: ServerMessage) -> ControlFlow {
     match message {
@@ -10,17 +12,46 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             ret.send(()).unwrap();
             return ControlFlow::Stop;
         }
-        ServerMessage::Connected(identity) => {
-            let world: &World = &state.database;
+        ServerMessage::Connected(user) => {
+            let world: &mut World = &mut state.database;
+            world.register_player(user.uuid, &mut state.updates);
             let positions = world.positions.read().iter().cloned().collect();
-            info!("Client {} connected", identity.name);
-            let _ = identity.address.send(Push::Positions(positions));
+            info!("User {} connected", user.name);
+            let observer = Observer {
+                sync_push: user.connection.sequential(),
+                after_update: state.updates.len(),
+            };
+            let _ = observer.sync_push.send(Push::Setup(Setup(
+                user.uuid,
+                world.players.clone(),
+                positions,
+            )));
+            state.observers.insert(user.uuid, observer);
         }
-        ServerMessage::Disconnected(identity) => {
-            info!("Client {} disconnected", identity.name);
+        ServerMessage::Disconnected(user) => {
+            info!("User {} disconnected", user.name);
+            state.observers.remove(&user.uuid);
         }
-        ServerMessage::Request(identity, _) => {
-            info!("Request from client {}", identity.name);
+        ServerMessage::PushUpdates => {
+            let mut updates = Vec::new();
+            swap(&mut state.updates, &mut updates);
+            let updates = Arc::new(updates);
+            for (_, observer) in state.observers.iter_mut() {
+                let _ = observer.sync_push.send(Push::Updates(UpdateBatch(
+                    updates.clone(),
+                    observer.after_update,
+                )));
+                observer.after_update = 0;
+            }
+        }
+        ServerMessage::Request(user, request) => {
+            info!("Request from client {}", user.name);
+            match request {
+                crate::Request::UpdatePosition(pos) => {
+                    let world: &mut World = &mut state.database;
+                    world.update_player_position(user.uuid, pos, &mut state.updates)
+                }
+            }
         }
     }
     ControlFlow::Continue

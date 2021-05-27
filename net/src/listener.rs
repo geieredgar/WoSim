@@ -9,7 +9,7 @@ use quinn::{
 };
 use tokio::spawn;
 
-use crate::{remote_address, session, Client, Service};
+use crate::{session, AuthToken, Connection, Service};
 
 pub struct Listener {
     endpoint: Endpoint,
@@ -100,9 +100,9 @@ async fn accept<S: Service>(connecting: Connecting, service: Arc<S>) -> Result<(
         .await
         .map_err(AcceptError::ReadToken)?;
     let token = std::str::from_utf8(&buffer).map_err(AcceptError::InvalidToken)?;
-    let address = remote_address(connection.clone());
+    let connection = Connection::Remote(connection);
     let receiver = service
-        .authenticate(Client::Remote { token }, address)
+        .authenticate(connection, AuthToken::Remote(token))
         .map_err(AcceptError::TokenAuthentication)?;
     session(bi_streams, uni_streams, datagrams, receiver).await;
     Ok(())

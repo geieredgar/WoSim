@@ -23,6 +23,7 @@ serde_json = "1.0.59"
 server = { path = "../server", package = "wosim-server" }
 structopt = "0.3.21"
 util = { path = "../util", package = "wosim-util" }
+uuid = "0.8.2"
 vulkan = { path = "../vulkan", package = "wosim-vulkan" }
 webbrowser = "0.5.5"
 winit = "0.24"

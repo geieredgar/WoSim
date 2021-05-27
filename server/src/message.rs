@@ -1,132 +1,72 @@
-use std::fmt::Display;
+use std::{collections::HashMap, sync::Arc};
 
-use net::{FromBiStream, FromDatagram, FromUniStream, Message, ReadError, Writer};
-use quinn::SendStream;
-use tokio::{spawn, sync::oneshot};
+use net::{Message, OutgoingMessage};
+use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
+use uuid::Uuid;
 
-use crate::{state::Position, Identity};
+use crate::{
+    state::{Position, Update},
+    Player, User,
+};
 
 #[derive(Debug)]
-pub struct Request;
+pub enum Request {
+    UpdatePosition(Position),
+}
 
 #[derive(Debug)]
 pub(crate) enum ServerMessage {
-    Connected(Identity),
-    Disconnected(Identity),
-    Request(Identity, Request),
+    Connected(User),
+    Disconnected(User),
+    Request(User, Request),
     Stop(oneshot::Sender<()>),
-}
-
-impl FromDatagram for Request {
-    type Error = MessageError;
-
-    fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
-}
-
-impl FromUniStream for Request {
-    type Error = MessageError;
-
-    fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
-
-    fn size_limit() -> usize {
-        4096
-    }
-}
-
-impl FromBiStream for Request {
-    type Error = MessageError;
-
-    fn from(_reader: net::Reader, _send: SendStream) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
-
-    fn size_limit() -> usize {
-        4096
-    }
+    PushUpdates,
 }
 
 impl Message for Request {
-    type Error = MessageError;
+    fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
+        OutgoingMessage::fail()
+    }
 
-    fn send(self, _connection: quinn::Connection) -> Result<(), MessageError> {
-        Ok(())
+    fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
+        message.invalid_id()
+    }
+
+    fn size_limit(_message_id: u32) -> usize {
+        0
     }
 }
 
 #[derive(Debug)]
 pub enum Push {
-    Positions(Vec<Position>),
+    Setup(Setup),
+    Updates(UpdateBatch),
 }
 
-impl FromDatagram for Push {
-    type Error = MessageError;
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Setup(pub Uuid, pub HashMap<Uuid, Player>, pub Vec<Position>);
 
-    fn from(_reader: net::Reader) -> Result<Self, Self::Error> {
-        Err(MessageError::Invalid)
-    }
-}
-
-impl FromUniStream for Push {
-    type Error = MessageError;
-
-    fn from(mut reader: net::Reader) -> Result<Self, Self::Error> {
-        let positions = reader.read()?;
-        Ok(Self::Positions(positions))
-    }
-
-    fn size_limit() -> usize {
-        1024 * 1024
-    }
-}
-
-impl FromBiStream for Push {
-    type Error = MessageError;
-
-    fn from(_reader: net::Reader, _send: SendStream) -> Result<Self, Self::Error> {
-        Err(MessageError::Invalid)
-    }
-
-    fn size_limit() -> usize {
-        0
-    }
-}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateBatch(pub Arc<Vec<Update>>, pub usize);
 
 impl Message for Push {
-    type Error = MessageError;
-
-    fn send(self, connection: quinn::Connection) -> Result<(), MessageError> {
+    fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
         match self {
-            Push::Positions(positions) => spawn(async move {
-                let send = connection.open_uni().await.unwrap();
-                let mut writer = Writer::new();
-                writer.write(&positions).unwrap();
-                writer.send(send).await.unwrap();
-            }),
-        };
-        Ok(())
+            Push::Setup(setup) => Ok(OutgoingMessage::uni(1, setup)?),
+            Push::Updates(updates) => Ok(OutgoingMessage::uni(2, updates)?),
+        }
     }
-}
 
-#[derive(Debug)]
-pub enum MessageError {
-    Read(ReadError),
-    Invalid,
-}
-
-impl std::error::Error for MessageError {}
-
-impl Display for MessageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+    fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
+        match message.id() {
+            1 => Ok(Self::Setup(message.value()?)),
+            2 => Ok(Self::Updates(message.value()?)),
+            _ => message.invalid_id(),
+        }
     }
-}
 
-impl From<ReadError> for MessageError {
-    fn from(error: ReadError) -> Self {
-        Self::Read(error)
+    fn size_limit(_message_id: u32) -> usize {
+        4096 * 4096
     }
 }

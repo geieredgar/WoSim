@@ -93,6 +93,13 @@ impl Device {
         }
     }
 
+    pub fn submit_without_fence(&self, submits: &[SubmitInfo]) -> VkResult<()> {
+        unsafe {
+            self.inner
+                .queue_submit(self.main_queue.handle, submits, vk::Fence::null())
+        }
+    }
+
     pub fn transfer_submit(&self, submits: &[SubmitInfo], fence: Option<&Fence>) -> VkResult<()> {
         unsafe {
             self.inner.queue_submit(

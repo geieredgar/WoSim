@@ -21,4 +21,4 @@ pub use file::File;
 pub use header::Format;
 pub use object::Object;
 pub use reference::DatabaseRef;
-pub use vec::Vec;
+pub use vec::{Len, Vec};

@@ -1,4 +1,5 @@
-use std::{cell::RefCell, env, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
+use std::collections::HashMap;
+use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};
@@ -17,15 +18,17 @@ use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::{error, LevelFilter, Log};
 use log::{info, Level};
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
+use net::Server;
 use renderer::Renderer;
 use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
 use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
-use server::{Connection, Push, Request, Service, PROTOCOL};
+use server::{Connection, Player, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
+use uuid::Uuid;
 
 mod context;
 mod cull;
@@ -55,10 +58,12 @@ struct Application {
     vsync: bool,
     last_update: Instant,
     time: f32,
-    _server: Address<Request>,
-    connection: Connection<Service>,
+    _server: Option<Server<Service>>,
+    connection: Connection<Request>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
+    uuid: Uuid,
+    other_players: HashMap<Uuid, (Player, usize)>,
 }
 
 impl Application {
@@ -68,7 +73,7 @@ impl Application {
         address: Address<ApplicationMessage>,
         resolver: Resolver,
     ) -> Result<Self, Error> {
-        let (_server, mut mailbox, mut connection) = resolver.resolve().await?;
+        let (connection, mut mailbox, mut _server) = resolver.resolve().await?;
         {
             let address = address.clone();
             spawn(async move {
@@ -80,7 +85,7 @@ impl Application {
                 }
             });
         }
-        if let Connection::Local(server) = &mut connection {
+        if let Some(server) = &mut _server {
             server.open(&"[::]:0".parse().unwrap()).unwrap();
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
@@ -127,6 +132,8 @@ impl Application {
             connection,
             windows: DebugWindows::default(),
             winit,
+            uuid: Uuid::nil(),
+            other_players: HashMap::new(),
         })
     }
 
@@ -206,10 +213,12 @@ impl Application {
         }
         match message {
             ApplicationMessage::Push(push) => match push {
-                Push::Positions(positions) => {
-                    self.context.scene.clear();
+                Push::Setup(Setup(uuid, players, positions)) => {
+                    self.uuid = uuid;
+                    self.other_players.clear();
+                    let mut static_group = Vec::new();
                     for pos in positions {
-                        self.context.scene.insert_object(Object {
+                        static_group.push(Object {
                             model: self.context.cube_model,
                             transform: Transform {
                                 translation: Vector3::new(pos.x, pos.y, pos.z),
@@ -217,6 +226,63 @@ impl Application {
                                 rotation: UnitQuaternion::identity(),
                             },
                         });
+                    }
+                    let mut player_group = Vec::new();
+                    for (uuid, player) in players {
+                        if self.uuid != uuid {
+                            self.other_players
+                                .insert(uuid, (player.clone(), player_group.len()));
+                            player_group.push(Object {
+                                model: self.context.cube_model,
+                                transform: Transform {
+                                    translation: Vector3::new(
+                                        player.position.x,
+                                        player.position.y,
+                                        player.position.z,
+                                    ),
+                                    scale: Vector3::new(1.0, 1.0, 1.0),
+                                    rotation: UnitQuaternion::identity(),
+                                },
+                            })
+                        }
+                    }
+                    self.context.scene.groups.clear();
+                    self.context.scene.groups.push(static_group);
+                    self.context.scene.groups.push(player_group);
+                }
+                Push::Updates(UpdateBatch(updates, after_index)) => {
+                    for update in &updates[after_index..] {
+                        match update {
+                            Update::NewPlayer(uuid, player) => {
+                                let player_group = &mut self.context.scene.groups[1];
+                                self.other_players
+                                    .insert(*uuid, (player.clone(), player_group.len()));
+                                player_group.push(Object {
+                                    model: self.context.cube_model,
+                                    transform: Transform {
+                                        translation: Vector3::new(
+                                            player.position.x,
+                                            player.position.y,
+                                            player.position.z,
+                                        ),
+                                        scale: Vector3::new(1.0, 1.0, 1.0),
+                                        rotation: UnitQuaternion::identity(),
+                                    },
+                                })
+                            }
+                            Update::PlayerPosition(uuid, pos) => {
+                                if self.uuid != *uuid {
+                                    let player_group = &mut self.context.scene.groups[1];
+                                    let (player, index) = self.other_players.get_mut(uuid).unwrap();
+                                    player.position = *pos;
+                                    player_group[*index].transform.translation = Vector3::new(
+                                        player.position.x,
+                                        player.position.y,
+                                        player.position.z,
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -232,7 +298,7 @@ impl Application {
             }
             ApplicationMessage::WindowEvent(event) => match event {
                 WindowEvent::Resized(_) => {
-                    self.recreate_renderer()?;
+                    self.recreate_swapchain()?;
                 }
                 WindowEvent::KeyboardInput {
                     device_id: _,
@@ -272,7 +338,7 @@ impl Application {
                             VirtualKeyCode::F9 => {
                                 if input.state == ElementState::Pressed {
                                     self.vsync = !self.vsync;
-                                    self.recreate_renderer()?;
+                                    self.recreate_swapchain()?;
                                 }
                             }
                             VirtualKeyCode::F10 => {
@@ -350,7 +416,7 @@ impl Application {
         };
         self.context.debug.end_frame(timestamps);
         if resize {
-            self.recreate_renderer()?;
+            self.recreate_swapchain()?;
         }
         self.address
             .send(ApplicationMessage::Render)
@@ -367,7 +433,7 @@ impl Application {
         HandleFlow::Unhandled
     }
 
-    fn recreate_renderer(&mut self) -> Result<(), Error> {
+    fn recreate_swapchain(&mut self) -> Result<(), Error> {
         self.device.wait_idle()?;
         self.swapchain = Arc::new(create_swapchain(
             &self.device,
@@ -376,7 +442,8 @@ impl Application {
             self.vsync,
             Some(&self.swapchain),
         )?);
-        self.renderer = Renderer::new(&self.device, &self.context, self.swapchain.clone())?;
+        self.renderer
+            .recreate_view(&self.device, &self.context, self.swapchain.clone())?;
         Ok(())
     }
 
@@ -510,9 +577,13 @@ enum Command {
         #[structopt(long)]
         skip_verification: bool,
     },
-    Play,
+    Play {
+        token: String,
+    },
     Info,
-    Create,
+    Create {
+        token: String,
+    },
 }
 
 impl Command {
@@ -532,8 +603,10 @@ impl Command {
                     skip_verification,
                 }),
             ),
-            Command::Create => run(Runtime::new()?, Self::spawn(Resolver::Create)),
-            Command::Play => run(Runtime::new()?, Self::spawn(Resolver::Open)),
+            Command::Create { token } => {
+                run(Runtime::new()?, Self::spawn(Resolver::Create { token }))
+            }
+            Command::Play { token } => run(Runtime::new()?, Self::spawn(Resolver::Open { token })),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {
@@ -565,6 +638,15 @@ impl Command {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+fn setup_env() {}
+
+#[cfg(target_os = "macos")]
+fn setup_env() {
+    set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
+}
+
 fn main() -> Result<(), Error> {
+    setup_env();
     Command::from_args().run()
 }

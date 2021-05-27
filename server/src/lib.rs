@@ -1,9 +1,9 @@
 mod error;
 mod handle;
-mod identity;
 mod message;
 mod service;
 mod state;
+mod user;
 mod vulkan;
 
 use std::io;
@@ -12,11 +12,13 @@ pub use crate::vulkan::*;
 use db::Database;
 pub use error::*;
 pub(self) use handle::handle;
-pub(self) use identity::Identity;
 pub use message::*;
 pub use service::*;
+pub use state::Player;
 pub(self) use state::State;
+pub use state::Update;
 pub(self) use state::World;
+pub(self) use user::User;
 
 pub use net::Connection;
 pub use quinn::Certificate;

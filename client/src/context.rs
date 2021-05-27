@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
-use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
+use nalgebra::{RealField, Translation3, Vector3};
 
-use vulkan::{Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE};
+use vulkan::{
+    CommandBuffer, CommandBufferLevel, CommandPool, CommandPoolCreateFlags, DescriptorPool,
+    DescriptorPoolSetup, Device, PipelineCache, PipelineCacheCreateFlags, FALSE, TRUE,
+};
 
 use crate::{
     cull::CullContext,
@@ -10,8 +13,9 @@ use crate::{
     depth::DepthContext,
     egui::EguiContext,
     error::Error,
+    frame::Frame,
     renderer::RenderConfiguration,
-    scene::{Camera, MeshData, Model, Object, SceneContext, Sphere, Transform, Vertex},
+    scene::{Camera, MeshData, Model, SceneContext, Sphere, Vertex},
 };
 
 pub struct Context {
@@ -23,6 +27,9 @@ pub struct Context {
     pub configuration: RenderConfiguration,
     pub egui: EguiContext,
     pub debug: DebugContext,
+    pub descriptor_pool: DescriptorPool,
+    pub command_pool: CommandPool,
+    pub command_buffer: CommandBuffer,
 }
 
 impl Context {
@@ -93,28 +100,16 @@ impl Context {
             },
             mesh: cube_mesh,
         });
-        for x in -20..21 {
-            for y in -20..21 {
-                for z in -20..21 {
-                    scene.insert_object(Object {
-                        model: cube_model,
-                        transform: Transform {
-                            translation: Vector3::new(
-                                x as f32 * 3.0,
-                                y as f32 * 3.0,
-                                z as f32 * 3.0,
-                            ),
-                            scale: Vector3::new(0.3, 0.3, 0.3),
-                            rotation: UnitQuaternion::from_euler_angles(
-                                x as f32, y as f32, z as f32,
-                            ),
-                        },
-                    });
-                }
-            }
-        }
         scene.flush()?;
-        let depth = DepthContext::new(device, &pipeline_cache)?;
+        let command_pool = device.create_command_pool(
+            CommandPoolCreateFlags::TRANSIENT,
+            device.main_queue_family_index(),
+        )?;
+        let mut command_buffers = command_pool.allocate(CommandBufferLevel::PRIMARY, 1)?;
+        let command_buffer = command_buffers.remove(0);
+        let descriptor_pool =
+            (Context::pool_setup() + Frame::pool_setup() * 2).create_pool(device)?;
+        let depth = DepthContext::new(device, &pipeline_cache, &descriptor_pool)?;
         let cull = CullContext::new(
             device,
             if configuration.use_draw_count {
@@ -133,6 +128,13 @@ impl Context {
             configuration,
             egui,
             debug,
+            descriptor_pool,
+            command_pool,
+            command_buffer,
         })
+    }
+
+    pub fn pool_setup() -> DescriptorPoolSetup {
+        DepthContext::pool_setup()
     }
 }

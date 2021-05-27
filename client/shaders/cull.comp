@@ -62,7 +62,8 @@ void main() {
   vec4 model_center = vec4(to_vec3(model.bounds.center), 1.0);
   vec4 world_center = transform * model_center;
   vec4 view_center = view * world_center;
-  bool visible = frustumVisible(view_center.xyz, radius);
+  bool visible =
+      model.mesh.indexCount != 0 && frustumVisible(view_center.xyz, radius);
   view_center = previous_view * world_center;
   vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
   if (-view_center.z - radius > znear) {

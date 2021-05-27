@@ -166,123 +166,12 @@ pub struct FileGuard<'a, H: Deref<Target = FileHeader>> {
 pub type ReadFileGuard<'a> = FileGuard<'a, &'a FileHeader>;
 pub type WriteFileGuard<'a> = FileGuard<'a, &'a mut FileHeader>;
 
-/*
-
 impl Drop for File {
     fn drop(&mut self) {
         let lock = self.database.lock();
         if !lock.is_closing() {
-            reallocate(self.header.root, self.header.pages(), 0, &lock)
+            drop(lock);
+            self.write().set_len(0);
         }
     }
 }
-
-impl Seek for File {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        match pos {
-            io::SeekFrom::Start(pos) => self.pos = pos,
-            io::SeekFrom::End(offset) => self.pos = self.header.len as u64 + offset,
-            io::SeekFrom::Current(offset) => self.pos += offset,
-        }
-        if let Some(cursor) = self.cursor.as_mut() {
-            if self.pos < self.header.len as u64 {
-                unsafe { cursor.seek(self.pos as u32 / PAGE_SIZE_U32, &self.database.lock()) }
-            } else {
-                self.cursor = None
-            }
-        }
-    }
-}
-
-impl Write for File {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let len = buf.len();
-        let end = self.cursor.pos() as usize * PAGE_SIZE + self.page_offset + len;
-        if end > self.header.len as usize {
-            self.resize(end)
-        }
-        while !buf.is_empty() {
-            let mut n = self.page_remaining();
-            if n == 0 {
-                self.cursor.seek(self.cursor.pos() + 1);
-                self.page_offset = 0;
-                n = PAGE_SIZE;
-            }
-            n = n.min(buf.len());
-            let (a, b) = buf.split_at(n);
-            self.cursor.page_mut()[self.page_offset..self.page_offset + n].copy_from_slice(a);
-            self.page_offset += n;
-            buf = b;
-        }
-        self.header.root = self.cursor.root();
-        Ok(len)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-pub struct FileReader<'a> {
-    file: &'a File,
-    pos: usize,
-}
-
-impl<'a> FileReader<'a> {
-    fn new(header: &'a FileHeader, lock: Lock<'a>) -> Self {
-        Self {
-            header,
-            cursor: Cursor::new(header.root, header.pages(), lock),
-            page_offset: 0,
-        }
-    }
-}
-
-impl<'a> FileWriter<'a> {
-    fn new(header: &'a mut FileHeader, lock: Lock<'a>) -> Self {
-        let cursor = Cursor::new(header.root, header.pages(), lock);
-        Self {
-            header,
-            cursor,
-            page_offset: 0,
-        }
-    }
-
-    fn resize(&mut self, len: usize) {
-        assert!(len < 2usize.pow(u32::BITS));
-        self.header.len = len as u32;
-        self.cursor.resize(self.header.pages());
-        self.header.root = self.cursor.root();
-    }
-}
-
-impl<'a> Write for FileWriter<'a> {
-    fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {}
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> Read for FileReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let len = buf.len().min(self.remaining());
-        let mut buf = buf.split_at_mut(len).0;
-        while !buf.is_empty() {
-            let mut n = self.page_remaining();
-            if n == 0 {
-                let pos = self.cursor().pos();
-                self.cursor.seek(pos + 1);
-                self.page_offset = 0;
-                n = PAGE_SIZE;
-            }
-            n = n.min(buf.len());
-            let (a, b) = buf.split_at_mut(n);
-            a.copy_from_slice(&self.cursor.page()[self.page_offset..self.page_offset + n]);
-            buf = b;
-        }
-        Ok(len)
-    }
-}
-
-*/

@@ -1,22 +1,21 @@
 use std::sync::Arc;
 
 use vulkan::{
-    mip_levels_for_extent, AccessFlags, AttachmentDescription, AttachmentLoadOp,
-    AttachmentReference, AttachmentStoreOp, DescriptorPool, Device, ImageLayout, PipelineBindPoint,
-    PipelineStageFlags, RenderPass, RenderPassCreateInfo, SampleCountFlags, SubpassDependency,
-    SubpassDescription, Swapchain, SwapchainImage, SUBPASS_EXTERNAL,
+    mip_levels_for_extent, AccessFlags, ApiResult, AttachmentDescription, AttachmentLoadOp,
+    AttachmentReference, AttachmentStoreOp, ClearColorValue, CommandBufferUsageFlags,
+    CommandPoolResetFlags, DependencyFlags, Device, Framebuffer, FramebufferCreateFlags,
+    ImageAspectFlags, ImageLayout, ImageMemoryBarrier, ImageSubresourceRange, PipelineBindPoint,
+    PipelineStageFlags, RenderPass, RenderPassCreateInfo, SampleCountFlags, SubmitInfo,
+    SubpassDependency, SubpassDescription, Swapchain, SwapchainImage, SUBPASS_EXTERNAL,
 };
 
-use crate::{
-    context::Context, depth::DepthView, egui::EguiView, error::Error, frame::Frame,
-    scene::SceneView,
-};
+use crate::{context::Context, depth::DepthView, egui::EguiView, error::Error, scene::SceneView};
 
 pub struct View {
     pub depth: DepthView,
     pub egui: EguiView,
     pub scene: SceneView,
-    pub descriptor_pool: DescriptorPool,
+    pub framebuffers: Vec<Framebuffer>,
     pub render_pass: RenderPass,
     pub images: Vec<SwapchainImage>,
     pub swapchain: Arc<Swapchain>,
@@ -135,8 +134,6 @@ impl View {
         let images = swapchain.images()?;
         let image_extent = swapchain.image_extent();
         let depth_pyramid_mip_levels = mip_levels_for_extent(image_extent);
-        let descriptor_pool =
-            (Frame::pool_setup(depth_pyramid_mip_levels) * 2).create_pool(device)?;
         let egui = EguiView::new(
             device,
             &context.egui,
@@ -153,15 +150,92 @@ impl View {
             0,
             image_extent,
         )?;
-        let depth = DepthView::new(device, depth_pyramid_mip_levels)?;
+        let depth = DepthView::new(
+            device,
+            &context.depth,
+            &context.configuration,
+            image_extent,
+            depth_pyramid_mip_levels,
+        )?;
+        let framebuffers: Result<_, ApiResult> = images
+            .iter()
+            .map(|image| {
+                render_pass.create_framebuffer(
+                    FramebufferCreateFlags::empty(),
+                    &[
+                        image.view(),
+                        &depth.image_view,
+                        &depth.image_view,
+                        image.view(),
+                    ],
+                    image_extent.width,
+                    image_extent.height,
+                    1,
+                )
+            })
+            .collect();
+        let framebuffers = framebuffers?;
         Ok(Self {
             depth,
             egui,
             scene,
-            descriptor_pool,
+            framebuffers,
             render_pass,
             images,
             swapchain,
         })
     }
+
+    pub fn setup(&mut self, device: &Arc<Device>, context: &mut Context) -> Result<(), ApiResult> {
+        context.command_pool.reset(CommandPoolResetFlags::empty())?;
+        context
+            .command_buffer
+            .begin(CommandBufferUsageFlags::ONE_TIME_SUBMIT, None)?;
+        let subresource_range = ImageSubresourceRange::builder()
+            .aspect_mask(ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(self.depth.pyramid_views.len() as u32)
+            .base_array_layer(0)
+            .layer_count(1)
+            .build();
+        let image_memory_barriers = [ImageMemoryBarrier::builder()
+            .image(*self.depth.pyramid_image)
+            .src_access_mask(AccessFlags::empty())
+            .dst_access_mask(AccessFlags::TRANSFER_WRITE)
+            .old_layout(ImageLayout::UNDEFINED)
+            .new_layout(ImageLayout::GENERAL)
+            .subresource_range(subresource_range)
+            .build()];
+        context.command_buffer.pipeline_barrier(
+            PipelineStageFlags::TOP_OF_PIPE,
+            PipelineStageFlags::TRANSFER,
+            DependencyFlags::empty(),
+            &[],
+            &[],
+            &image_memory_barriers,
+        );
+        context.command_buffer.clear_color_image(
+            &self.depth.pyramid_image,
+            ImageLayout::GENERAL,
+            &ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 0.0],
+            },
+            &[subresource_range],
+        );
+        context.command_buffer.end()?;
+        let command_buffers = [*context.command_buffer];
+        let signal_semaphores = [*self.depth.ready];
+        let wait_semaphores = [];
+        let wait_dst_stage_mask = [];
+        let submits = [SubmitInfo::builder()
+            .command_buffers(&command_buffers)
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_dst_stage_mask)
+            .signal_semaphores(&signal_semaphores)
+            .build()];
+        device.submit_without_fence(&submits)?;
+        Ok(())
+    }
+
+    pub const MAX_MIP_LEVELS: usize = 13;
 }

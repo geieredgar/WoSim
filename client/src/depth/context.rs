@@ -1,13 +1,15 @@
+use std::convert::TryInto;
 use std::{ffi::CString, sync::Arc};
 
 use util::shader::align_bytes;
 use vulkan::{
-    ComputePipelineCreateInfo, DescriptorSetLayout, DescriptorSetLayoutBinding,
-    DescriptorSetLayoutCreateFlags, DescriptorType, Device, Pipeline, PipelineCache,
-    PipelineLayout, PipelineLayoutCreateFlags, PipelineShaderStageCreateInfo, ShaderModule,
-    ShaderModuleCreateFlags, ShaderStageFlags,
+    ComputePipelineCreateInfo, DescriptorPool, DescriptorPoolSetup, DescriptorSet,
+    DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateFlags,
+    DescriptorType, Device, Pipeline, PipelineCache, PipelineLayout, PipelineLayoutCreateFlags,
+    PipelineShaderStageCreateInfo, ShaderModule, ShaderModuleCreateFlags, ShaderStageFlags,
 };
 
+use crate::view::View;
 use crate::{error::Error, shaders::DEPTH_PYRAMID_COMP};
 
 pub struct DepthContext {
@@ -15,10 +17,15 @@ pub struct DepthContext {
     pub pipeline_layout: PipelineLayout,
     pub set_layout: DescriptorSetLayout,
     pub shader_module: ShaderModule,
+    pub descriptor_sets: [DescriptorSet; View::MAX_MIP_LEVELS],
 }
 
 impl DepthContext {
-    pub fn new(device: &Arc<Device>, pipeline_cache: &PipelineCache) -> Result<Self, Error> {
+    pub fn new(
+        device: &Arc<Device>,
+        pipeline_cache: &PipelineCache,
+        descriptor_pool: &DescriptorPool,
+    ) -> Result<Self, Error> {
         let shader_module = device.create_shader_module(
             ShaderModuleCreateFlags::empty(),
             &align_bytes(DEPTH_PYRAMID_COMP.load()?.bytes()),
@@ -56,11 +63,23 @@ impl DepthContext {
             .build()];
         let mut pipelines = pipeline_cache.create_compute(&create_infos)?;
         let pipeline = pipelines.remove(0);
+        let descriptor_sets = descriptor_pool.allocate(&[&set_layout; View::MAX_MIP_LEVELS])?;
         Ok(Self {
             pipeline,
             pipeline_layout,
             set_layout,
             shader_module,
+            descriptor_sets: descriptor_sets.try_into().unwrap(),
         })
+    }
+
+    pub fn pool_setup() -> DescriptorPoolSetup {
+        DescriptorPoolSetup {
+            storage_buffers: 0,
+            uniform_buffers: 0,
+            sets: 1,
+            combined_image_samplers: 1,
+            storage_images: 1,
+        } * View::MAX_MIP_LEVELS as u32
     }
 }

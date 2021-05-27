@@ -1,4 +1,4 @@
-use std::{ops::Deref, sync::Arc};
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
 use ash::{
     prelude::VkResult,
@@ -14,6 +14,12 @@ use super::{DerefHandle, Device, Handle, HandleWrapper};
 pub struct Object<T: Handle> {
     pub(super) device: Arc<Device>,
     pub(super) handle: T,
+}
+
+impl<T: Handle + Debug> Debug for Object<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.handle)
+    }
 }
 
 impl<T: Handle> HandleWrapper for Object<T> {

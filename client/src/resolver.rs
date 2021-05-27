@@ -4,8 +4,12 @@ use net::{ResolveSuccess, Verification};
 use server::{create_world, AuthenticationError, CreateServiceError, Service};
 
 pub enum Resolver {
-    Create,
-    Open,
+    Create {
+        token: String,
+    },
+    Open {
+        token: String,
+    },
     Remote {
         hostname: String,
         port: u16,
@@ -24,15 +28,17 @@ pub enum ResolveError {
 impl Resolver {
     pub async fn resolve(self) -> Result<ResolveSuccess<Service>, ResolveError> {
         match self {
-            Resolver::Create => {
+            Resolver::Create { token } => {
                 create_world().map_err(ResolveError::CreateWorld)?;
-                net::Resolver::Local(Arc::new(
-                    Service::new().map_err(ResolveError::CreateService)?,
-                ))
+                net::Resolver::Local {
+                    service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
+                    token,
+                }
             }
-            Resolver::Open => net::Resolver::Local(Arc::new(
-                Service::new().map_err(ResolveError::CreateService)?,
-            )),
+            Resolver::Open { token } => net::Resolver::Local {
+                service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
+                token,
+            },
             Resolver::Remote {
                 hostname,
                 port,

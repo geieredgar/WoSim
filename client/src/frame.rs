@@ -1,20 +1,17 @@
 use std::{mem::size_of, sync::Arc};
 
 use vulkan::{
-    AccessFlags, ApiResult, BufferCopy, BufferMemoryBarrier, ClearColorValue,
-    ClearDepthStencilValue, ClearValue, CommandBuffer, CommandBufferLevel, CommandBufferUsageFlags,
-    CommandPool, CommandPoolCreateFlags, CommandPoolResetFlags, DependencyFlags,
-    DescriptorPoolSetup, Device, DrawIndexedIndirectCommand, Fence, FenceCreateFlags, Framebuffer,
-    FramebufferCreateFlags, ImageAspectFlags, ImageLayout, ImageMemoryBarrier,
-    ImageSubresourceRange, Offset2D, PipelineBindPoint, PipelineStageFlags,
-    QueryPipelineStatisticFlags, QueryPool, QueryResultFlags, QueryType, Rect2D, Semaphore,
-    SubmitInfo, SubpassContents,
+    AccessFlags, BufferCopy, BufferMemoryBarrier, ClearColorValue, ClearDepthStencilValue,
+    ClearValue, CommandBuffer, CommandBufferLevel, CommandBufferUsageFlags, CommandPool,
+    CommandPoolCreateFlags, CommandPoolResetFlags, DependencyFlags, DescriptorPoolSetup, Device,
+    DrawIndexedIndirectCommand, Fence, FenceCreateFlags, Offset2D, PipelineBindPoint,
+    PipelineStageFlags, QueryPipelineStatisticFlags, QueryPool, QueryResultFlags, QueryType,
+    Rect2D, Semaphore, SubmitInfo, SubpassContents,
 };
 
 use crate::{
     context::Context,
     cull::CullFrame,
-    depth::DepthFrame,
     egui::EguiFrame,
     error::Error,
     renderer::{RenderResult, RenderTimestamps},
@@ -23,9 +20,7 @@ use crate::{
 };
 
 pub struct Frame {
-    framebuffers: Vec<Framebuffer>,
     cull: CullFrame,
-    depth: DepthFrame,
     scene: SceneFrame,
     egui: EguiFrame,
     command_buffer: CommandBuffer,
@@ -34,11 +29,10 @@ pub struct Frame {
     render_finished: Semaphore,
     timestamp_pool: QueryPool,
     command_pool: CommandPool,
-    first_render: bool,
 }
 
 impl Frame {
-    pub fn new(device: &Arc<Device>, context: &Context, view: &View) -> Result<Self, Error> {
+    pub fn new(device: &Arc<Device>, context: &Context) -> Result<Self, Error> {
         let command_pool = device.create_command_pool(
             CommandPoolCreateFlags::TRANSIENT,
             device.main_queue_family_index(),
@@ -53,54 +47,22 @@ impl Frame {
         let main_queue_fence = device.create_fence(FenceCreateFlags::SIGNALED)?;
         let image_ready = device.create_semaphore()?;
         let render_finished = device.create_semaphore()?;
-        let image_extent = view.swapchain.image_extent();
-        let egui = EguiFrame::new(device, &context.egui, &view.descriptor_pool)?;
+        let egui = EguiFrame::new(device, &context.egui, &context.descriptor_pool)?;
         let scene = SceneFrame::new(
             device,
             &context.scene,
             2usize.pow(20),
-            &view.descriptor_pool,
-        )?;
-        let depth = DepthFrame::new(
-            device,
-            &context.depth,
-            &view.depth,
-            &context.configuration,
-            &view.descriptor_pool,
-            image_extent,
+            &context.descriptor_pool,
         )?;
         let cull = CullFrame::new(
             device,
             &context.cull,
-            &view.depth,
-            &depth,
             &context.scene,
             &scene,
-            &view.descriptor_pool,
+            &context.descriptor_pool,
         )?;
-        let framebuffers: Result<_, ApiResult> = view
-            .images
-            .iter()
-            .map(|image| {
-                view.render_pass.create_framebuffer(
-                    FramebufferCreateFlags::empty(),
-                    &[
-                        image.view(),
-                        &depth.image_view,
-                        &depth.image_view,
-                        image.view(),
-                    ],
-                    image_extent.width,
-                    image_extent.height,
-                    1,
-                )
-            })
-            .collect();
-        let framebuffers = framebuffers?;
         Ok(Self {
-            framebuffers,
             cull,
-            depth,
             scene,
             egui,
             command_buffer,
@@ -109,8 +71,11 @@ impl Frame {
             render_finished,
             timestamp_pool,
             command_pool,
-            first_render: true,
         })
+    }
+
+    pub fn setup_view(&mut self, device: &Arc<Device>, view: &View) {
+        self.cull.setup_view(device, &view.depth);
     }
 
     pub fn render(
@@ -137,40 +102,6 @@ impl Frame {
             &self.timestamp_pool,
             0,
         );
-        if self.first_render {
-            self.first_render = false;
-            let subresource_range = ImageSubresourceRange::builder()
-                .aspect_mask(ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(self.depth.pyramid_views.len() as u32)
-                .base_array_layer(0)
-                .layer_count(1)
-                .build();
-            let image_memory_barriers = [ImageMemoryBarrier::builder()
-                .image(*self.depth.pyramid_image)
-                .src_access_mask(AccessFlags::empty())
-                .dst_access_mask(AccessFlags::TRANSFER_WRITE)
-                .old_layout(ImageLayout::UNDEFINED)
-                .new_layout(ImageLayout::GENERAL)
-                .subresource_range(subresource_range)
-                .build()];
-            self.command_buffer.pipeline_barrier(
-                PipelineStageFlags::TOP_OF_PIPE,
-                PipelineStageFlags::TRANSFER,
-                DependencyFlags::empty(),
-                &[],
-                &[],
-                &image_memory_barriers,
-            );
-            self.command_buffer.clear_color_image(
-                &self.depth.pyramid_image,
-                ImageLayout::GENERAL,
-                &ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 0.0],
-                },
-                &[subresource_range],
-            )
-        }
         self.egui
             .prepare(device, &self.command_buffer, &mut context.egui)?;
         self.command_buffer
@@ -202,7 +133,7 @@ impl Frame {
             &[],
         );
         self.command_buffer
-            .dispatch((context.scene.objects.len() as u32 + 255) / 256, 1, 1);
+            .dispatch((self.scene.objects.len() as u32 + 255) / 256, 1, 1);
         let buffer_memory_barriers = [
             BufferMemoryBarrier::builder()
                 .src_access_mask(AccessFlags::SHADER_WRITE)
@@ -211,9 +142,7 @@ impl Frame {
                 .dst_queue_family_index(0)
                 .buffer(*self.scene.commands)
                 .offset(0)
-                .size(
-                    (context.scene.objects.len() * size_of::<DrawIndexedIndirectCommand>()) as u64,
-                )
+                .size((self.scene.objects.len() * size_of::<DrawIndexedIndirectCommand>()) as u64)
                 .build(),
             BufferMemoryBarrier::builder()
                 .src_access_mask(AccessFlags::SHADER_WRITE)
@@ -260,7 +189,7 @@ impl Frame {
         ];
         self.command_buffer.begin_render_pass(
             &view.render_pass,
-            &self.framebuffers[image_index as usize],
+            &view.framebuffers[image_index as usize],
             Rect2D {
                 offset: Offset2D { x: 0, y: 0 },
                 extent: view.swapchain.image_extent(),
@@ -289,9 +218,12 @@ impl Frame {
         );
         self.command_buffer.end()?;
         let command_buffers = [*self.command_buffer];
-        let signal_semaphores = [*self.render_finished];
-        let wait_semaphores = [*self.image_ready];
-        let wait_dst_stage_mask = [PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let signal_semaphores = [*self.render_finished, *view.depth.ready];
+        let wait_semaphores = [*self.image_ready, *view.depth.ready];
+        let wait_dst_stage_mask = [
+            PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            PipelineStageFlags::COMPUTE_SHADER,
+        ];
         let submits = [SubmitInfo::builder()
             .command_buffers(&command_buffers)
             .wait_semaphores(&wait_semaphores)
@@ -315,10 +247,7 @@ impl Frame {
         })
     }
 
-    pub fn pool_setup(depth_pyramid_mip_levels: u32) -> DescriptorPoolSetup {
-        EguiFrame::pool_setup()
-            + DepthFrame::pool_setup(depth_pyramid_mip_levels)
-            + CullFrame::pool_setup()
-            + SceneFrame::pool_setup()
+    pub fn pool_setup() -> DescriptorPoolSetup {
+        EguiFrame::pool_setup() + CullFrame::pool_setup() + SceneFrame::pool_setup()
     }
 }

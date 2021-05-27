@@ -1,6 +1,9 @@
 use iced::{button, container, text_input, Color};
 
-use crate::theme::Theme;
+use crate::{
+    icon,
+    theme::{Theme, RGB},
+};
 
 pub struct PrimaryButton(pub Theme);
 pub struct DefaultTextInput(pub Theme);
@@ -8,7 +11,7 @@ pub struct SelectableButton(pub Theme, pub bool);
 pub struct ForegroundOption(pub Theme, pub bool);
 pub struct BackgroundContainer(pub Theme);
 pub struct ForegroundContainer(pub Theme, pub f32);
-
+pub struct LogoContainer(pub Theme);
 pub struct ButtonContainer(pub Theme);
 pub struct InlineButton(pub Theme);
 
@@ -68,6 +71,16 @@ impl button::StyleSheet for SelectableButton {
     }
 }
 
+impl icon::StyleSheet for SelectableButton {
+    fn color(&self) -> RGB {
+        if self.1 {
+            self.0.colors().surface.bright
+        } else {
+            self.0.colors().surface.normal
+        }
+    }
+}
+
 impl button::StyleSheet for ForegroundOption {
     fn active(&self) -> button::Style {
         button::Style {
@@ -106,6 +119,12 @@ impl button::StyleSheet for PrimaryButton {
     }
 }
 
+impl icon::StyleSheet for PrimaryButton {
+    fn color(&self) -> RGB {
+        self.0.colors().primary.bright
+    }
+}
+
 impl button::StyleSheet for InlineButton {
     fn active(&self) -> button::Style {
         button::Style {
@@ -125,6 +144,12 @@ impl button::StyleSheet for InlineButton {
                 ..Default::default()
             },
         }
+    }
+}
+
+impl icon::StyleSheet for InlineButton {
+    fn color(&self) -> RGB {
+        self.0.colors().primary.bright
     }
 }
 
@@ -156,6 +181,17 @@ impl container::StyleSheet for ForegroundContainer {
             background: Some(self.0.colors().foreground.into()),
             text_color: Some(self.0.colors().surface.bright.into()),
             border_radius: self.1,
+            ..Default::default()
+        }
+    }
+}
+
+impl container::StyleSheet for LogoContainer {
+    fn style(&self) -> container::Style {
+        container::Style {
+            background: Some(self.0.colors().primary.bright.into()),
+            text_color: Some(self.0.colors().foreground.into()),
+            border_radius: 5.0,
             ..Default::default()
         }
     }

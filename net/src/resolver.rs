@@ -5,17 +5,20 @@ use std::{
     sync::Arc,
 };
 
-use actor::{mailbox, Address, Mailbox};
+use actor::{mailbox, Mailbox};
 use quinn::{
     ClientConfigBuilder, ConnectError, ConnectionError, Endpoint, EndpointError, NewConnection,
     WriteError,
 };
 use tokio::spawn;
 
-use crate::{remote_address, session, Client, Connection, Server, Service, Verification};
+use crate::{session, AuthToken, Connection, Server, Service, Verification};
 
 pub enum Resolver<S: Service> {
-    Local(Arc<S>),
+    Local {
+        service: Arc<S>,
+        token: String,
+    },
     Remote {
         hostname: String,
         port: u16,
@@ -27,9 +30,9 @@ pub enum Resolver<S: Service> {
 pub type ResolveResult<S> = Result<ResolveSuccess<S>, ResolveError<<S as Service>::AuthError>>;
 
 pub type ResolveSuccess<S> = (
-    Address<<S as Service>::Request>,
+    Connection<<S as Service>::Request>,
     Mailbox<<S as Service>::Push>,
-    Connection<S>,
+    Option<Server<S>>,
 );
 #[derive(Debug)]
 pub enum ResolveError<A> {
@@ -48,12 +51,16 @@ pub enum ResolveError<A> {
 impl<S: Service> Resolver<S> {
     pub async fn resolve(self) -> ResolveResult<S> {
         match self {
-            Resolver::Local(service) => {
+            Resolver::Local { service, token } => {
                 let (mailbox, address) = mailbox();
                 let address = service
-                    .authenticate(Client::Local, address)
+                    .authenticate(Connection::Local(address), AuthToken::Local(&token))
                     .map_err(ResolveError::TokenAuthentication)?;
-                Ok((address, mailbox, Connection::Local(Server::new(service))))
+                Ok((
+                    Connection::Local(address),
+                    mailbox,
+                    Some(Server::new(service)),
+                ))
             }
             Resolver::Remote {
                 hostname,
@@ -102,10 +109,9 @@ impl<S: Service> Resolver<S> {
                 send.finish()
                     .await
                     .map_err(ResolveError::FinishTokenStream)?;
-                let server = remote_address(connection.clone());
                 let (mailbox, client) = mailbox();
                 spawn(session(bi_streams, uni_streams, datagrams, client));
-                Ok((server, mailbox, Connection::Remote(connection)))
+                Ok((Connection::Remote(connection), mailbox, None))
             }
         }
     }
