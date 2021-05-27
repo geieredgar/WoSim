@@ -44,7 +44,7 @@ impl WorldComponent {
                                 .push(
                                     Button::new(
                                         &mut self.state.delete,
-                                        Icon::Trash.svg(theme.colors().primary.bright, 32, 32),
+                                        Icon::Trash.svg(32, 32, InlineButton(theme)),
                                     )
                                     .style(InlineButton(theme))
                                     .on_press(Message::SetupDeleteWorld(self.world.clone())),
@@ -52,7 +52,7 @@ impl WorldComponent {
                                 .push(
                                     Button::new(
                                         &mut self.state.play,
-                                        Icon::Play.svg(theme.colors().primary.bright, 32, 32),
+                                        Icon::Play.svg(32, 32, InlineButton(theme)),
                                     )
                                     .style(InlineButton(theme))
                                     .on_press(Message::PlayWorld(self.world.clone())),

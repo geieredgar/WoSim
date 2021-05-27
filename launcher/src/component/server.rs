@@ -46,7 +46,7 @@ impl ServerComponent {
                         Container::new(
                             Button::new(
                                 &mut self.state.join,
-                                Icon::Play.svg(theme.colors().primary.bright, 32, 32),
+                                Icon::Play.svg(32, 32, InlineButton(theme)),
                             )
                             .style(InlineButton(theme))
                             .on_press(Message::JoinServer(self.server.clone())),

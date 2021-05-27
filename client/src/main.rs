@@ -1,6 +1,4 @@
-use std::{
-    cell::RefCell, env::set_var, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant,
-};
+use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use crate::winit::{run, Event, EventLoop, UserEvent};

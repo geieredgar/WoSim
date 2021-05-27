@@ -36,9 +36,13 @@ impl Icon {
         Handle::from_memory(input)
     }
 
-    pub fn svg(self, color: RGB, width: u16, height: u16) -> Svg {
-        Svg::new(self.handle(color))
+    pub fn svg(self, width: u16, height: u16, style: impl StyleSheet) -> Svg {
+        Svg::new(self.handle(style.color()))
             .width(Length::Units(width))
             .height(Length::Units(height))
     }
+}
+
+pub trait StyleSheet {
+    fn color(&self) -> RGB;
 }

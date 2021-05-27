@@ -1,6 +1,9 @@
 use iced::{button, container, text_input, Color};
 
-use crate::theme::Theme;
+use crate::{
+    icon,
+    theme::{Theme, RGB},
+};
 
 pub struct PrimaryButton(pub Theme);
 pub struct DefaultTextInput(pub Theme);
@@ -68,6 +71,16 @@ impl button::StyleSheet for SelectableButton {
     }
 }
 
+impl icon::StyleSheet for SelectableButton {
+    fn color(&self) -> RGB {
+        if self.1 {
+            self.0.colors().surface.bright
+        } else {
+            self.0.colors().surface.normal
+        }
+    }
+}
+
 impl button::StyleSheet for ForegroundOption {
     fn active(&self) -> button::Style {
         button::Style {
@@ -106,6 +119,12 @@ impl button::StyleSheet for PrimaryButton {
     }
 }
 
+impl icon::StyleSheet for PrimaryButton {
+    fn color(&self) -> RGB {
+        self.0.colors().primary.bright
+    }
+}
+
 impl button::StyleSheet for InlineButton {
     fn active(&self) -> button::Style {
         button::Style {
@@ -125,6 +144,12 @@ impl button::StyleSheet for InlineButton {
                 ..Default::default()
             },
         }
+    }
+}
+
+impl icon::StyleSheet for InlineButton {
+    fn color(&self) -> RGB {
+        self.0.colors().primary.bright
     }
 }
 

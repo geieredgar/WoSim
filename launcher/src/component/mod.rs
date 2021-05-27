@@ -17,7 +17,7 @@ use iced::{Align, Container, Element, Length, Row, Space, Text};
 use crate::{
     icon::Icon,
     message::Message,
-    style::{BackgroundContainer, ForegroundContainer},
+    style::{BackgroundContainer, ForegroundContainer, PrimaryButton},
     theme::Theme,
 };
 
@@ -35,7 +35,7 @@ pub fn header<'a>(
 ) -> Container<'a, Message> {
     Container::new(
         Row::new()
-            .push(Icon::Joystick.svg(theme.colors().primary.bright, 32, 32))
+            .push(Icon::Joystick.svg(32, 32, PrimaryButton(theme)))
             .push(
                 Text::new("WoSim")
                     .size(30)
