@@ -6,9 +6,11 @@ use server::{create_world, AuthenticationError, CreateServiceError, Service};
 pub enum Resolver {
     Create {
         token: String,
+        port: u16,
     },
     Open {
         token: String,
+        port: u16,
     },
     Remote {
         hostname: String,
@@ -28,16 +30,18 @@ pub enum ResolveError {
 impl Resolver {
     pub async fn resolve(self) -> Result<ResolveSuccess<Service>, ResolveError> {
         match self {
-            Resolver::Create { token } => {
+            Resolver::Create { token, port } => {
                 create_world().map_err(ResolveError::CreateWorld)?;
                 net::Resolver::Local {
                     service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
                     token,
+                    port,
                 }
             }
-            Resolver::Open { token } => net::Resolver::Local {
+            Resolver::Open { token, port } => net::Resolver::Local {
                 service: Arc::new(Service::new().map_err(ResolveError::CreateService)?),
                 token,
+                port,
             },
             Resolver::Remote {
                 hostname,

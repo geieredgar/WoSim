@@ -1,4 +1,4 @@
-use std::{fmt::Display, time::Duration};
+use std::{error::Error as StdError, fmt::Display, time::Duration};
 
 use actor::Address;
 use bytes::{Buf, Bytes, BytesMut};
@@ -23,7 +23,7 @@ pub enum Connection<M: Message + 'static> {
 }
 
 impl<M: Message> Connection<M> {
-    pub fn sequential(&self) -> Address<M> {
+    pub fn asynchronous(&self) -> Address<M> {
         match self {
             Connection::Local(address) => address.clone(),
             Connection::Remote(connection) => {
@@ -41,7 +41,7 @@ impl<M: Message> Connection<M> {
         }
     }
 
-    pub fn parallel(&self) -> Address<M> {
+    pub fn synchronous(&self) -> Address<M> {
         match self {
             Connection::Local(address) => address.clone(),
             Connection::Remote(connection) => {
@@ -88,6 +88,8 @@ impl Display for Error {
         write!(f, "{:?}", self)
     }
 }
+
+impl StdError for Error {}
 
 impl From<SendError> for Error {
     fn from(error: SendError) -> Self {

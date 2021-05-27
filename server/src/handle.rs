@@ -18,7 +18,7 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             let positions = world.positions.read().iter().cloned().collect();
             info!("User {} connected", user.name);
             let observer = Observer {
-                sync_push: user.connection.sequential(),
+                sync_push: user.connection.synchronous(),
                 after_update: state.updates.len(),
             };
             let _ = observer.sync_push.send(Push::Setup(Setup(

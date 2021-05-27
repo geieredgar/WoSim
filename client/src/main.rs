@@ -5,7 +5,7 @@ use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate}
 use crate::winit::{run, Event, EventLoop, UserEvent};
 use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::{
-    dpi::{PhysicalPosition, PhysicalSize, Position},
+    dpi::{PhysicalPosition, PhysicalSize},
     event::{DeviceEvent, DeviceId, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
     window::{Fullscreen, Window, WindowBuilder},
 };
@@ -24,7 +24,9 @@ use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
 use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
-use server::{Connection, Player, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL};
+use server::{
+    Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
+};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -57,8 +59,9 @@ struct Application {
     grab: bool,
     vsync: bool,
     last_update: Instant,
+    last_server_update: Instant,
     time: f32,
-    _server: Option<Server<Service>>,
+    server: Option<Server<Service>>,
     connection: Connection<Request>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
@@ -73,7 +76,7 @@ impl Application {
         address: Address<ApplicationMessage>,
         resolver: Resolver,
     ) -> Result<Self, Error> {
-        let (connection, mut mailbox, mut _server) = resolver.resolve().await?;
+        let (connection, mut mailbox, mut server) = resolver.resolve().await?;
         {
             let address = address.clone();
             spawn(async move {
@@ -85,8 +88,8 @@ impl Application {
                 }
             });
         }
-        if let Some(server) = &mut _server {
-            server.open(&"[::]:0".parse().unwrap()).unwrap();
+        if let Some(server) = &mut server {
+            server.open().unwrap();
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
@@ -110,6 +113,7 @@ impl Application {
         address
             .send(ApplicationMessage::Render)
             .map_err(Error::Send)?;
+        let now = Instant::now();
         Ok(Self {
             address,
             renderer,
@@ -126,9 +130,10 @@ impl Application {
             },
             grab: false,
             vsync: true,
-            last_update: Instant::now(),
+            last_update: now,
+            last_server_update: now,
             time: 0.0,
-            _server,
+            server,
             connection,
             windows: DebugWindows::default(),
             winit,
@@ -166,13 +171,14 @@ impl Application {
                 while let Some(message) = mailbox.recv().await {
                     match application.handle(message) {
                         Ok(ControlFlow::Continue) => {}
-                        Ok(ControlFlow::Stop) => return,
+                        Ok(ControlFlow::Stop) => break,
                         Err(error) => {
                             error!("Task failed: {:?}", error);
-                            return;
+                            break;
                         }
                     }
                 }
+                application.stop().await;
             })
         };
         Ok((
@@ -196,6 +202,13 @@ impl Application {
             }),
             handle,
         ))
+    }
+
+    async fn stop(&mut self) {
+        if let Some(server) = self.server.as_mut() {
+            server.close();
+            let _ = server.service().stop().await;
+        }
     }
 
     fn handle(&mut self, message: ApplicationMessage) -> Result<ControlFlow, Error> {
@@ -244,6 +257,12 @@ impl Application {
                                     rotation: UnitQuaternion::identity(),
                                 },
                             })
+                        } else {
+                            self.context.scene.camera.translation = Translation3::new(
+                                player.position.x,
+                                player.position.y,
+                                player.position.z,
+                            );
                         }
                     }
                     self.context.scene.groups.clear();
@@ -387,36 +406,42 @@ impl Application {
         Ok(ControlFlow::Continue)
     }
 
+    fn is_setup(&self) -> bool {
+        !self.uuid.is_nil()
+    }
+
     fn render(&mut self) -> Result<(), Error> {
-        self.update();
-        self.context.debug.begin_frame();
-        let ctx = self.context.egui.begin();
-        self.context
-            .debug
-            .render(&ctx, &mut self.windows, &self.connection);
-        self.context
-            .egui
-            .end(if self.grab { None } else { Some(&self.window) })?;
-        let result = self.renderer.render(&self.device, &mut self.context);
-        let (resize, timestamps) = match result {
-            Ok(result) => (result.suboptimal, result.timestamps),
-            Err(err) => match err {
-                Error::Vulkan(vulkan_err) => match vulkan_err {
-                    ::vulkan::Error::ApiResult(result) => {
-                        if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                            (true, None)
-                        } else {
-                            return Err(Error::Vulkan(vulkan_err));
+        if self.is_setup() {
+            self.update();
+            self.context.debug.begin_frame();
+            let ctx = self.context.egui.begin();
+            self.context
+                .debug
+                .render(&ctx, &mut self.windows, &self.connection);
+            self.context
+                .egui
+                .end(if self.grab { None } else { Some(&self.window) })?;
+            let result = self.renderer.render(&self.device, &mut self.context);
+            let (resize, timestamps) = match result {
+                Ok(result) => (result.suboptimal, result.timestamps),
+                Err(err) => match err {
+                    Error::Vulkan(vulkan_err) => match vulkan_err {
+                        ::vulkan::Error::ApiResult(result) => {
+                            if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
+                                (true, None)
+                            } else {
+                                return Err(Error::Vulkan(vulkan_err));
+                            }
                         }
-                    }
-                    _ => return Err(Error::Vulkan(vulkan_err)),
+                        _ => return Err(Error::Vulkan(vulkan_err)),
+                    },
+                    _ => return Err(err),
                 },
-                _ => return Err(err),
-            },
-        };
-        self.context.debug.end_frame(timestamps);
-        if resize {
-            self.recreate_swapchain()?;
+            };
+            self.context.debug.end_frame(timestamps);
+            if resize {
+                self.recreate_swapchain()?;
+            }
         }
         self.address
             .send(ApplicationMessage::Render)
@@ -450,7 +475,7 @@ impl Application {
     fn update(&mut self) {
         let now = Instant::now();
         let duration = now.duration_since(self.last_update);
-        self.last_update = Instant::now();
+        self.last_update = now;
         let distance = duration.as_secs_f32() * 10.0;
         self.time += duration.as_secs_f32();
         let mut translation = Vector3::<f32>::zeros();
@@ -469,6 +494,18 @@ impl Application {
         let translation: Translation3<_> =
             (self.context.scene.camera.rotation() * translation).into();
         self.context.scene.camera.translation *= translation;
+        let duration = now.duration_since(self.last_server_update);
+        if duration.as_millis() > 1000 / 30 && self.is_setup() {
+            self.last_server_update = now;
+            let _ = self
+                .connection
+                .asynchronous()
+                .send(Request::UpdatePosition(Position {
+                    x: self.context.scene.camera.translation.vector[0],
+                    y: self.context.scene.camera.translation.vector[1],
+                    z: self.context.scene.camera.translation.vector[2],
+                }));
+        }
     }
 
     fn set_grab(&mut self, grab: bool) -> Result<(), Error> {
@@ -486,7 +523,7 @@ impl Application {
                 y: size.height as i32 / 2,
             };
             self.window
-                .set_cursor_position(Position::Physical(position))?;
+                .set_cursor_position(::winit::dpi::Position::Physical(position))?;
             self.window.set_cursor_visible(true);
             self.window.set_cursor_grab(false)?;
         }
@@ -579,10 +616,33 @@ enum Command {
     },
     Play {
         token: String,
+        #[structopt(long, short, default_value)]
+        port: u16,
     },
     Info,
     Create {
         token: String,
+        #[structopt(long, short, default_value)]
+        port: u16,
+    },
+    #[cfg(debug_assertions)]
+    Debug(DebugCommand),
+}
+
+#[derive(StructOpt)]
+enum DebugCommand {
+    Play {
+        #[structopt(default_value)]
+        port: u16,
+    },
+    Create {
+        #[structopt(default_value)]
+        port: u16,
+    },
+    Join {
+        port: u16,
+        #[structopt(long, short, default_value, default_value = "localhost")]
+        hostname: String,
     },
 }
 
@@ -603,10 +663,13 @@ impl Command {
                     skip_verification,
                 }),
             ),
-            Command::Create { token } => {
-                run(Runtime::new()?, Self::spawn(Resolver::Create { token }))
+            Command::Create { token, port } => run(
+                Runtime::new()?,
+                Self::spawn(Resolver::Create { token, port }),
+            ),
+            Command::Play { token, port } => {
+                run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
             }
-            Command::Play { token } => run(Runtime::new()?, Self::spawn(Resolver::Open { token })),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {
@@ -625,6 +688,30 @@ impl Command {
                     protocol: PROTOCOL.to_owned(),
                 },
             )?),
+            Command::Debug(command) => {
+                let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
+                match command {
+                    DebugCommand::Play { port } => {
+                        run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
+                    }
+                    DebugCommand::Create { port } => {
+                        std::fs::remove_file("world.db")?;
+                        run(
+                            Runtime::new()?,
+                            Self::spawn(Resolver::Create { token, port }),
+                        )
+                    }
+                    DebugCommand::Join { hostname, port } => run(
+                        Runtime::new()?,
+                        Self::spawn(Resolver::Remote {
+                            hostname,
+                            port,
+                            token,
+                            skip_verification: true,
+                        }),
+                    ),
+                }
+            }
         }
     }
 
@@ -643,7 +730,7 @@ fn setup_env() {}
 
 #[cfg(target_os = "macos")]
 fn setup_env() {
-    set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
+    std::env::set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
 }
 
 fn main() -> Result<(), Error> {
