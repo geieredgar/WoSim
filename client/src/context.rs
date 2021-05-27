@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
+use nalgebra::{RealField, Translation3, Vector3};
 
 use vulkan::{
     CommandBuffer, CommandBufferLevel, CommandPool, CommandPoolCreateFlags, DescriptorPool,
@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     frame::Frame,
     renderer::RenderConfiguration,
-    scene::{Camera, MeshData, Model, Object, SceneContext, Sphere, Transform, Vertex},
+    scene::{Camera, MeshData, Model, SceneContext, Sphere, Vertex},
 };
 
 pub struct Context {
@@ -100,26 +100,6 @@ impl Context {
             },
             mesh: cube_mesh,
         });
-        for x in -20..21 {
-            for y in -20..21 {
-                for z in -20..21 {
-                    scene.insert_object(Object {
-                        model: cube_model,
-                        transform: Transform {
-                            translation: Vector3::new(
-                                x as f32 * 3.0,
-                                y as f32 * 3.0,
-                                z as f32 * 3.0,
-                            ),
-                            scale: Vector3::new(0.3, 0.3, 0.3),
-                            rotation: UnitQuaternion::from_euler_angles(
-                                x as f32, y as f32, z as f32,
-                            ),
-                        },
-                    });
-                }
-            }
-        }
         scene.flush()?;
         let command_pool = device.create_command_pool(
             CommandPoolCreateFlags::TRANSIENT,
