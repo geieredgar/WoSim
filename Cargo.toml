@@ -11,4 +11,4 @@ members = [
     "vulkan",
     "server",
 ]
-default-members = ["launcher"]
+default-members = ["client"]
