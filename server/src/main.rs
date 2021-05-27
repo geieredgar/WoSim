@@ -37,10 +37,8 @@ fn main() -> Result<(), Error> {
             .ok_or(Error::NoSuitableDeviceFound)?
             .create()?;
         let service = Arc::new(Service::new().map_err(Error::CreateService)?);
-        let mut server = Server::new(service.clone());
-        server
-            .open(&"[::]:0".parse().unwrap())
-            .map_err(Error::OpenServer)?;
+        let mut server = Server::new(service.clone(), "[::]:0".parse().unwrap());
+        server.open().map_err(Error::OpenServer)?;
         while running.load(Ordering::SeqCst) {
             sleep(Duration::from_millis(10)).await;
         }

@@ -89,7 +89,7 @@ impl Application {
             });
         }
         if let Some(server) = &mut server {
-            server.open(&"[::]:0".parse().unwrap()).unwrap();
+            server.open().unwrap();
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(Instance::new(
@@ -411,35 +411,37 @@ impl Application {
     }
 
     fn render(&mut self) -> Result<(), Error> {
-        self.update();
-        self.context.debug.begin_frame();
-        let ctx = self.context.egui.begin();
-        self.context
-            .debug
-            .render(&ctx, &mut self.windows, &self.connection);
-        self.context
-            .egui
-            .end(if self.grab { None } else { Some(&self.window) })?;
-        let result = self.renderer.render(&self.device, &mut self.context);
-        let (resize, timestamps) = match result {
-            Ok(result) => (result.suboptimal, result.timestamps),
-            Err(err) => match err {
-                Error::Vulkan(vulkan_err) => match vulkan_err {
-                    ::vulkan::Error::ApiResult(result) => {
-                        if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                            (true, None)
-                        } else {
-                            return Err(Error::Vulkan(vulkan_err));
+        if self.is_setup() {
+            self.update();
+            self.context.debug.begin_frame();
+            let ctx = self.context.egui.begin();
+            self.context
+                .debug
+                .render(&ctx, &mut self.windows, &self.connection);
+            self.context
+                .egui
+                .end(if self.grab { None } else { Some(&self.window) })?;
+            let result = self.renderer.render(&self.device, &mut self.context);
+            let (resize, timestamps) = match result {
+                Ok(result) => (result.suboptimal, result.timestamps),
+                Err(err) => match err {
+                    Error::Vulkan(vulkan_err) => match vulkan_err {
+                        ::vulkan::Error::ApiResult(result) => {
+                            if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
+                                (true, None)
+                            } else {
+                                return Err(Error::Vulkan(vulkan_err));
+                            }
                         }
-                    }
-                    _ => return Err(Error::Vulkan(vulkan_err)),
+                        _ => return Err(Error::Vulkan(vulkan_err)),
+                    },
+                    _ => return Err(err),
                 },
-                _ => return Err(err),
-            },
-        };
-        self.context.debug.end_frame(timestamps);
-        if resize {
-            self.recreate_swapchain()?;
+            };
+            self.context.debug.end_frame(timestamps);
+            if resize {
+                self.recreate_swapchain()?;
+            }
         }
         self.address
             .send(ApplicationMessage::Render)
@@ -614,10 +616,33 @@ enum Command {
     },
     Play {
         token: String,
+        #[structopt(long, short, default_value)]
+        port: u16,
     },
     Info,
     Create {
         token: String,
+        #[structopt(long, short, default_value)]
+        port: u16,
+    },
+    #[cfg(debug_assertions)]
+    Debug(DebugCommand),
+}
+
+#[derive(StructOpt)]
+enum DebugCommand {
+    Play {
+        #[structopt(default_value)]
+        port: u16,
+    },
+    Create {
+        #[structopt(default_value)]
+        port: u16,
+    },
+    Join {
+        port: u16,
+        #[structopt(long, short, default_value, default_value = "localhost")]
+        hostname: String,
     },
 }
 
@@ -638,10 +663,13 @@ impl Command {
                     skip_verification,
                 }),
             ),
-            Command::Create { token } => {
-                run(Runtime::new()?, Self::spawn(Resolver::Create { token }))
+            Command::Create { token, port } => run(
+                Runtime::new()?,
+                Self::spawn(Resolver::Create { token, port }),
+            ),
+            Command::Play { token, port } => {
+                run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
             }
-            Command::Play { token } => run(Runtime::new()?, Self::spawn(Resolver::Open { token })),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {
@@ -660,6 +688,30 @@ impl Command {
                     protocol: PROTOCOL.to_owned(),
                 },
             )?),
+            Command::Debug(command) => {
+                let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
+                match command {
+                    DebugCommand::Play { port } => {
+                        run(Runtime::new()?, Self::spawn(Resolver::Open { token, port }))
+                    }
+                    DebugCommand::Create { port } => {
+                        std::fs::remove_file("world.db")?;
+                        run(
+                            Runtime::new()?,
+                            Self::spawn(Resolver::Create { token, port }),
+                        )
+                    }
+                    DebugCommand::Join { hostname, port } => run(
+                        Runtime::new()?,
+                        Self::spawn(Resolver::Remote {
+                            hostname,
+                            port,
+                            token,
+                            skip_verification: true,
+                        }),
+                    ),
+                }
+            }
         }
     }
 

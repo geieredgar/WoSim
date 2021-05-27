@@ -1,6 +1,6 @@
 use std::{
     io,
-    net::{IpAddr, ToSocketAddrs},
+    net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     str::FromStr,
     sync::Arc,
 };
@@ -18,6 +18,7 @@ pub enum Resolver<S: Service> {
     Local {
         service: Arc<S>,
         token: String,
+        port: u16,
     },
     Remote {
         hostname: String,
@@ -51,7 +52,11 @@ pub enum ResolveError<A> {
 impl<S: Service> Resolver<S> {
     pub async fn resolve(self) -> ResolveResult<S> {
         match self {
-            Resolver::Local { service, token } => {
+            Resolver::Local {
+                service,
+                token,
+                port,
+            } => {
                 let (mailbox, address) = mailbox();
                 let address = service
                     .authenticate(Connection::Local(address), AuthToken::Local(&token))
@@ -59,7 +64,10 @@ impl<S: Service> Resolver<S> {
                 Ok((
                     Connection::Local(address),
                     mailbox,
-                    Some(Server::new(service)),
+                    Some(Server::new(
+                        service,
+                        SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
+                    )),
                 ))
             }
             Resolver::Remote {

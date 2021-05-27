@@ -10,6 +10,7 @@ edition = "2018"
 [dependencies]
 actor = { path = "../actor", package = "wosim-actor" }
 ash-window = "0.6"
+base64 = "0.13.0"
 copypasta = "0.7.1"
 egui = "0.12.0"
 env_logger = "0.8.3"
@@ -23,7 +24,7 @@ serde_json = "1.0.59"
 server = { path = "../server", package = "wosim-server" }
 structopt = "0.3.21"
 util = { path = "../util", package = "wosim-util" }
-uuid = "0.8.2"
+uuid = { version = "0.8.2", features = ["v4"] }
 vulkan = { path = "../vulkan", package = "wosim-vulkan" }
 webbrowser = "0.5.5"
 winit = "0.24"
