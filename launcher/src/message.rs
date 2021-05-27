@@ -5,6 +5,7 @@ pub enum Message {
     Show,
     SelectWorldTab,
     SelectServerTab,
+    SelectSettingsTab,
     ScanLocalServers,
     SetupCreateWorld,
     SetupDeleteWorld(World),
@@ -13,6 +14,7 @@ pub enum Message {
     JoinServer(Server),
     FoundLocalServer(Server),
     ChangeName(String),
+    ChangeUsername(String),
     SelectVersion(Installation),
     CreateWorld(String, Installation),
 }

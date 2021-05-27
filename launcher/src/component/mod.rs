@@ -31,6 +31,17 @@ pub fn fluid_page<'a>(
         .style(BackgroundContainer(theme))
 }
 
+pub fn page<'a>(content: impl Into<Element<'a, Message>>, theme: Theme) -> Container<'a, Message> {
+    fluid_page(
+        Container::new(content)
+            .width(Length::Fill)
+            .max_width(600)
+            .height(Length::Fill)
+            .center_x(),
+        theme,
+    )
+}
+
 pub fn header<'a>(
     content: impl Into<Element<'a, Message>>,
     theme: Theme,

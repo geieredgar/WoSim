@@ -6,30 +6,32 @@ use std::{
 
 use directories::ProjectDirs;
 use iced::{
-    button, scrollable, Align, Button, Column, Command, Container, Length, Row, Scrollable, Space,
-    Subscription, Text,
+    button, scrollable, text_input, Align, Button, Column, Command, Container, Length, Row,
+    Scrollable, Space, Subscription, Text, TextInput,
 };
 use log::error;
 use tokio::process;
 
 use crate::{
     configuration::Configuration,
+    icon::Icon,
     installation::Installation,
     message::Message,
     scan::scan_dir,
     server::LocalServerScanner,
-    style::{ForegroundContainer, PrimaryButton, SelectableButton},
+    style::{DefaultTextInput, ForegroundContainer, PrimaryButton, SelectableButton},
     theme::Theme,
     world::{World, WorldInfo},
 };
 
 use super::{
-    fluid_page, header, CreateWorldComponent, DeleteWorldComponent, ServerComponent, WorldComponent,
+    fluid_page, header, page, CreateWorldComponent, DeleteWorldComponent, ServerComponent,
+    WorldComponent,
 };
 
 pub struct RootComponent {
     proj_dirs: ProjectDirs,
-    _configuration: Configuration,
+    configuration: Configuration,
     worlds: Vec<WorldComponent>,
     installations: Vec<Installation>,
     local_servers: Vec<ServerComponent>,
@@ -44,14 +46,17 @@ pub struct RootComponent {
 pub struct RootState {
     tab_servers: button::State,
     tab_worlds: button::State,
+    tab_settings: button::State,
     scan_local_servers: button::State,
     worlds_scroll: scrollable::State,
     servers_scroll: scrollable::State,
     create_world: button::State,
+    username: text_input::State,
 }
 pub enum RootTab {
     Worlds(WorldTab),
     Servers(ServerTab),
+    Settings,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -80,6 +85,7 @@ impl RootComponent {
                 self.local_server_scanner.rescan();
                 self.tab = RootTab::Servers(ServerTab::List)
             }
+            Message::SelectSettingsTab => self.tab = RootTab::Settings,
             Message::ScanLocalServers => {
                 self.local_servers.clear();
                 self.local_server_scanner.rescan();
@@ -206,6 +212,10 @@ impl RootComponent {
                 self.worlds.retain(|w| w.world.path != world.path);
                 self.tab = RootTab::Worlds(WorldTab::List);
             }
+            Message::ChangeUsername(username) => {
+                self.configuration.local.username = username;
+                self.save_configuration()
+            }
             message => self.tab.update(message),
         }
         Ok(Command::none())
@@ -224,6 +234,23 @@ impl RootComponent {
                     Button::new(&mut self.state.tab_servers, Text::new("Servers"))
                         .on_press(Message::SelectServerTab)
                         .style(SelectableButton(theme, self.tab.is_servers())),
+                )
+                .push(Space::with_width(Length::Fill))
+                .push(
+                    Button::new(
+                        &mut self.state.tab_settings,
+                        Row::new()
+                            .push(Icon::GearFill.svg(
+                                16,
+                                16,
+                                SelectableButton(theme, self.tab.is_settings()),
+                            ))
+                            .push(Text::new("Settings"))
+                            .spacing(5)
+                            .align_items(Align::Center),
+                    )
+                    .on_press(Message::SelectSettingsTab)
+                    .style(SelectableButton(theme, self.tab.is_settings())),
                 )
                 .align_items(Align::Center)
                 .width(Length::Fill)
@@ -298,6 +325,25 @@ impl RootComponent {
                     ),
                 ServerTab::Join => column,
             },
+            RootTab::Settings => column.push(page(
+                Column::new()
+                    .push(Space::with_height(Length::Units(20)))
+                    .push(Text::new("Local worlds & servers").size(30))
+                    .push(Space::with_height(Length::Units(10)))
+                    .push(Text::new("Username: "))
+                    .push(
+                        TextInput::new(
+                            &mut self.state.username,
+                            "Enter username",
+                            &self.configuration.local.username,
+                            Message::ChangeUsername,
+                        )
+                        .padding(5)
+                        .style(DefaultTextInput(theme)),
+                    )
+                    .spacing(10),
+                theme,
+            )),
         };
         fluid_page(column, theme)
     }
@@ -308,6 +354,10 @@ impl RootComponent {
 
     pub fn is_visible(&self) -> bool {
         self.visible
+    }
+
+    pub fn save_configuration(&self) {
+        Self::save_configuration_to_dirs(&self.configuration, &self.proj_dirs)
     }
 
     pub fn save_configuration_to_dirs(configuration: &Configuration, proj_dirs: &ProjectDirs) {
@@ -332,7 +382,7 @@ impl Default for RootComponent {
     fn default() -> Self {
         let proj_dirs =
             ProjectDirs::from("", "", "wosim").expect("could not determine home directory");
-        let _configuration = read_to_string(proj_dirs.config_dir().join("config.toml"))
+        let configuration = read_to_string(proj_dirs.config_dir().join("config.toml"))
             .ok()
             .map(|s| toml::from_str(&s).ok())
             .flatten()
@@ -347,7 +397,7 @@ impl Default for RootComponent {
         let versions = Installation::scan_current_dir();
         Self {
             proj_dirs,
-            _configuration,
+            configuration,
             worlds,
             installations: versions,
             theme: Theme::Dark,
@@ -365,6 +415,7 @@ impl RootTab {
         match self {
             RootTab::Worlds(_) => true,
             RootTab::Servers(_) => false,
+            RootTab::Settings => false,
         }
     }
 
@@ -372,6 +423,15 @@ impl RootTab {
         match self {
             RootTab::Worlds(_) => false,
             RootTab::Servers(_) => true,
+            RootTab::Settings => false,
+        }
+    }
+
+    fn is_settings(&self) -> bool {
+        match self {
+            RootTab::Worlds(_) => false,
+            RootTab::Servers(_) => false,
+            RootTab::Settings => true,
         }
     }
 
@@ -383,6 +443,7 @@ impl RootTab {
                 WorldTab::Delete(_) => panic!(),
             },
             RootTab::Servers(_) => panic!(),
+            RootTab::Settings => panic!(),
         }
     }
 }
