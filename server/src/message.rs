@@ -26,11 +26,16 @@ pub(crate) enum ServerMessage {
 
 impl Message for Request {
     fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
-        OutgoingMessage::fail()
+        match self {
+            Request::UpdatePosition(position) => Ok(OutgoingMessage::datagram(1, position)?),
+        }
     }
 
     fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
-        message.invalid_id()
+        match message.id() {
+            1 => Ok(Self::UpdatePosition(message.value()?)),
+            _ => message.invalid_id(),
+        }
     }
 
     fn size_limit(_message_id: u32) -> usize {
