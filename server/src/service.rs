@@ -138,14 +138,14 @@ impl net::Service for Service {
                     error!("{}", error);
                     return;
                 }
-                {
-                    while let Some(message) = mailbox.recv().await {
-                        if let Err(error) =
-                            address.send(ServerMessage::Request(user.clone(), message))
-                        {
-                            error!("{}", error);
-                            return;
-                        }
+                while let Some(request) = mailbox.recv().await {
+                    if let Request::Shutdown = request {
+                        break;
+                    }
+                    if let Err(error) = address.send(ServerMessage::Request(user.clone(), request))
+                    {
+                        error!("{}", error);
+                        return;
                     }
                 }
                 if let Err(error) = address.send(ServerMessage::Disconnected(user)) {

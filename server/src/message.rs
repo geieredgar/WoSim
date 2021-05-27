@@ -13,6 +13,7 @@ use crate::{
 #[derive(Debug)]
 pub enum Request {
     UpdatePosition(Position),
+    Shutdown,
 }
 
 #[derive(Debug)]
@@ -28,12 +29,14 @@ impl Message for Request {
     fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
         match self {
             Request::UpdatePosition(position) => Ok(OutgoingMessage::datagram(1, position)?),
+            Request::Shutdown => Ok(OutgoingMessage::uni(2, ())?),
         }
     }
 
     fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
         match message.id() {
             1 => Ok(Self::UpdatePosition(message.value()?)),
+            2 => Ok(Self::Shutdown),
             _ => message.invalid_id(),
         }
     }

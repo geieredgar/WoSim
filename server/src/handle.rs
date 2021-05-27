@@ -49,6 +49,7 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
                 let world: &mut World = &mut state.database;
                 world.update_player_position(user.uuid, pos, &mut state.updates)
             }
+            crate::Request::Shutdown => panic!(),
         },
     }
     ControlFlow::Continue
