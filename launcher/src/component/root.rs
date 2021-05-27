@@ -107,11 +107,17 @@ impl RootComponent {
                 if installations.len() == 1 {
                     let installation = (*installations.first().unwrap()).clone();
                     self.visible = false;
+                    let token = format!(
+                        "{}#{}",
+                        self.configuration.local.uuid,
+                        base64::encode(&self.configuration.local.username),
+                    );
                     return Ok(Command::perform(
                         async move {
                             match process::Command::new(installation.path.as_os_str())
                                 .current_dir(world.path)
                                 .arg("play")
+                                .arg(token)
                                 .spawn()
                             {
                                 Ok(mut child) => match child.wait().await {
@@ -134,13 +140,18 @@ impl RootComponent {
                 if installations.len() == 1 && info.authentication.is_none() {
                     let installation = (*installations.first().unwrap()).clone();
                     self.visible = false;
+                    let token = format!(
+                        "{}#{}",
+                        self.configuration.local.uuid,
+                        base64::encode(&self.configuration.local.username),
+                    );
                     return Ok(Command::perform(
                         async move {
                             match process::Command::new(installation.path.as_os_str())
                                 .arg("join")
                                 .arg(info.hostname)
                                 .arg(info.port.to_string())
-                                .arg("anonymous")
+                                .arg(token)
                                 .arg("--skip-verification")
                                 .spawn()
                             {
@@ -190,11 +201,17 @@ impl RootComponent {
                 }));
                 self.tab = RootTab::Worlds(WorldTab::List);
                 self.visible = false;
+                let token = format!(
+                    "{}#{}",
+                    self.configuration.local.uuid,
+                    base64::encode(&self.configuration.local.username),
+                );
                 return Ok(Command::perform(
                     async move {
                         match process::Command::new(installation.path.as_os_str())
                             .current_dir(path)
                             .arg("create")
+                            .arg(token)
                             .spawn()
                         {
                             Ok(mut child) => match child.wait().await {

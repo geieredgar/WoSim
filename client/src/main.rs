@@ -511,9 +511,13 @@ enum Command {
         #[structopt(long)]
         skip_verification: bool,
     },
-    Play,
+    Play {
+        token: String,
+    },
     Info,
-    Create,
+    Create {
+        token: String,
+    },
 }
 
 impl Command {
@@ -533,8 +537,10 @@ impl Command {
                     skip_verification,
                 }),
             ),
-            Command::Create => run(Runtime::new()?, Self::spawn(Resolver::Create)),
-            Command::Play => run(Runtime::new()?, Self::spawn(Resolver::Open)),
+            Command::Create { token } => {
+                run(Runtime::new()?, Self::spawn(Resolver::Create { token }))
+            }
+            Command::Play { token } => run(Runtime::new()?, Self::spawn(Resolver::Open { token })),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {

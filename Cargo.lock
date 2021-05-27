@@ -4334,6 +4334,7 @@ dependencies = [
 name = "wosim-launcher"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "directories",
  "dns-parser",
  "env_logger",

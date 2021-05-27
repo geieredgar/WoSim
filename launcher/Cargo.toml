@@ -8,6 +8,7 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
+base64 = "0.13.0"
 directories = "3.0.2"
 dns-parser = "0.8.0"
 env_logger = "0.8.3"
