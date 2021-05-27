@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
@@ -23,10 +24,11 @@ use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
 use semver::{Compat, Version, VersionReq};
 use serde_json::to_writer;
-use server::{Connection, Push, Request, Service, PROTOCOL};
+use server::{Connection, Player, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
+use uuid::Uuid;
 
 mod context;
 mod cull;
@@ -60,6 +62,8 @@ struct Application {
     connection: Connection<Request>,
     windows: DebugWindows,
     winit: Address<crate::winit::Request>,
+    uuid: Uuid,
+    other_players: HashMap<Uuid, (Player, usize)>,
 }
 
 impl Application {
@@ -128,6 +132,8 @@ impl Application {
             connection,
             windows: DebugWindows::default(),
             winit,
+            uuid: Uuid::nil(),
+            other_players: HashMap::new(),
         })
     }
 
@@ -207,10 +213,12 @@ impl Application {
         }
         match message {
             ApplicationMessage::Push(push) => match push {
-                Push::Positions(positions) => {
-                    self.context.scene.clear();
+                Push::Setup(Setup(uuid, players, positions)) => {
+                    self.uuid = uuid;
+                    self.other_players.clear();
+                    let mut static_group = Vec::new();
                     for pos in positions {
-                        self.context.scene.insert_object(Object {
+                        static_group.push(Object {
                             model: self.context.cube_model,
                             transform: Transform {
                                 translation: Vector3::new(pos.x, pos.y, pos.z),
@@ -218,6 +226,63 @@ impl Application {
                                 rotation: UnitQuaternion::identity(),
                             },
                         });
+                    }
+                    let mut player_group = Vec::new();
+                    for (uuid, player) in players {
+                        if self.uuid != uuid {
+                            self.other_players
+                                .insert(uuid, (player.clone(), player_group.len()));
+                            player_group.push(Object {
+                                model: self.context.cube_model,
+                                transform: Transform {
+                                    translation: Vector3::new(
+                                        player.position.x,
+                                        player.position.y,
+                                        player.position.z,
+                                    ),
+                                    scale: Vector3::new(1.0, 1.0, 1.0),
+                                    rotation: UnitQuaternion::identity(),
+                                },
+                            })
+                        }
+                    }
+                    self.context.scene.groups.clear();
+                    self.context.scene.groups.push(static_group);
+                    self.context.scene.groups.push(player_group);
+                }
+                Push::Updates(UpdateBatch(updates, after_index)) => {
+                    for update in &updates[after_index..] {
+                        match update {
+                            Update::NewPlayer(uuid, player) => {
+                                let player_group = &mut self.context.scene.groups[1];
+                                self.other_players
+                                    .insert(*uuid, (player.clone(), player_group.len()));
+                                player_group.push(Object {
+                                    model: self.context.cube_model,
+                                    transform: Transform {
+                                        translation: Vector3::new(
+                                            player.position.x,
+                                            player.position.y,
+                                            player.position.z,
+                                        ),
+                                        scale: Vector3::new(1.0, 1.0, 1.0),
+                                        rotation: UnitQuaternion::identity(),
+                                    },
+                                })
+                            }
+                            Update::PlayerPosition(uuid, pos) => {
+                                if self.uuid != *uuid {
+                                    let player_group = &mut self.context.scene.groups[1];
+                                    let (player, index) = self.other_players.get_mut(uuid).unwrap();
+                                    player.position = *pos;
+                                    player_group[*index].transform.translation = Vector3::new(
+                                        player.position.x,
+                                        player.position.y,
+                                        player.position.z,
+                                    );
+                                }
+                            }
+                        }
                     }
                 }
             },

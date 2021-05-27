@@ -18,7 +18,7 @@ pub struct SceneContext {
     pub vertices: GpuVec<Vertex>,
     pub vertex_indices: GpuVec<u32>,
     pub models: GpuVec<Model>,
-    pub objects: Vec<Object>,
+    pub groups: Vec<Vec<Object>>,
     pub camera: Camera,
     pub pipeline_layout: PipelineLayout,
     pub set_layout: DescriptorSetLayout,
@@ -84,19 +84,9 @@ impl SceneContext {
                 BufferUsageFlags::STORAGE_BUFFER,
                 MemoryUsage::CpuToGpu,
             )?,
-            objects: Vec::new(),
+            groups: Vec::new(),
             camera,
         })
-    }
-
-    pub fn insert_object(&mut self, object: Object) -> u32 {
-        let object_index = self.objects.len() as u32;
-        self.objects.push(object);
-        object_index
-    }
-
-    pub fn clear(&mut self) {
-        self.objects.clear();
     }
 
     pub fn insert_mesh(&mut self, mesh: MeshData) -> Mesh {

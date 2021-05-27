@@ -14,7 +14,9 @@ pub use error::*;
 pub(self) use handle::handle;
 pub use message::*;
 pub use service::*;
+pub use state::Player;
 pub(self) use state::State;
+pub use state::Update;
 pub(self) use state::World;
 pub(self) use user::User;
 

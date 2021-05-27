@@ -1,10 +1,19 @@
-use net::{Message, OutgoingMessage};
-use tokio::sync::oneshot;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{state::Position, User};
+use net::{Message, OutgoingMessage};
+use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
+use uuid::Uuid;
+
+use crate::{
+    state::{Position, Update},
+    Player, User,
+};
 
 #[derive(Debug)]
-pub struct Request;
+pub enum Request {
+    UpdatePosition(Position),
+}
 
 #[derive(Debug)]
 pub(crate) enum ServerMessage {
@@ -12,6 +21,7 @@ pub(crate) enum ServerMessage {
     Disconnected(User),
     Request(User, Request),
     Stop(oneshot::Sender<()>),
+    PushUpdates,
 }
 
 impl Message for Request {
@@ -30,19 +40,28 @@ impl Message for Request {
 
 #[derive(Debug)]
 pub enum Push {
-    Positions(Vec<Position>),
+    Setup(Setup),
+    Updates(UpdateBatch),
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Setup(pub Uuid, pub HashMap<Uuid, Player>, pub Vec<Position>);
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateBatch(pub Arc<Vec<Update>>, pub usize);
 
 impl Message for Push {
     fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
         match self {
-            Push::Positions(positions) => Ok(OutgoingMessage::uni(1, positions)?),
+            Push::Setup(setup) => Ok(OutgoingMessage::uni(1, setup)?),
+            Push::Updates(updates) => Ok(OutgoingMessage::uni(2, updates)?),
         }
     }
 
     fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
         match message.id() {
-            1 => Ok(Self::Positions(message.value()?)),
+            1 => Ok(Self::Setup(message.value()?)),
+            2 => Ok(Self::Updates(message.value()?)),
             _ => message.invalid_id(),
         }
     }

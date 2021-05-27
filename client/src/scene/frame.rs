@@ -141,8 +141,13 @@ impl SceneFrame {
         let previous_view = self.previous_view;
         self.previous_view = view;
         let view_projection = projection * view;
+        self.objects.clear();
+        for group in &context.groups {
+            self.objects.append(group);
+        }
+        self.objects.flush()?;
         *self.constants.value_mut() = SceneConstants {
-            object_count: context.objects.len() as u32,
+            object_count: self.objects.len() as u32,
             view,
             previous_view,
             projection,
@@ -153,9 +158,6 @@ impl SceneFrame {
             h,
         };
         self.constants.flush()?;
-        self.objects.clear();
-        self.objects.append(&context.objects);
-        self.objects.flush()?;
         self.draw_count_read_back.invalidate()?;
         Ok(*self.draw_count_read_back.value())
     }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env::current_dir,
     error::Error,
     fmt::{Debug, Display},
@@ -15,7 +16,7 @@ use log::error;
 use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
-use tokio::{spawn, sync::oneshot};
+use tokio::{spawn, sync::oneshot, time::interval};
 use uuid::Uuid;
 
 pub struct Service {
@@ -47,13 +48,29 @@ impl Service {
         let (mut mailbox, address) = mailbox();
         let database = Database::open("world.db").map_err(CreateServiceError::OpenDatabase)?;
         spawn(async move {
-            let mut state = State { database };
+            let mut state = State {
+                database,
+                updates: Vec::new(),
+                observers: HashMap::new(),
+            };
             while let Some(message) = mailbox.recv().await {
                 if let ControlFlow::Stop = handle(&mut state, message).await {
                     return;
                 }
             }
         });
+        {
+            let address = address.clone();
+            spawn(async move {
+                let mut interval = interval(Duration::from_millis(1000 / 30));
+                loop {
+                    interval.tick().await;
+                    if address.send(ServerMessage::PushUpdates).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
         let cert = generate_simple_self_signed(["localhost".to_owned()])
             .map_err(CreateServiceError::GenerateCertificates)?;
         let der = cert.serialize_private_key_der();

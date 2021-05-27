@@ -1,9 +1,27 @@
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    io::{self, ErrorKind},
+};
+
+use actor::Address;
+use bincode::serialize_into;
 use bytemuck::{Pod, Zeroable};
 use db::{Database, Object};
+use noise::{NoiseFn, Perlin};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::Push;
 
 pub(super) struct State {
     pub database: Database<World>,
+    pub updates: Vec<Update>,
+    pub observers: HashMap<Uuid, Observer>,
+}
+
+pub struct Observer {
+    pub sync_push: Address<Push>,
+    pub after_update: usize,
 }
 
 #[derive(Clone, Copy, Debug, Pod, Zeroable, Serialize, Deserialize)]
@@ -16,26 +34,64 @@ pub struct Position {
 
 pub struct World {
     pub positions: db::Vec<Position>,
+    pub players: HashMap<Uuid, Player>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Player {
+    pub position: Position,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Update {
+    NewPlayer(Uuid, Player),
+    PlayerPosition(Uuid, Position),
 }
 
 impl World {
     pub fn new(database: db::DatabaseRef) -> Self {
+        let perlin = Perlin::new();
         let mut positions = db::Vec::new(database);
         {
             let mut positions = positions.write();
             for x in -20..21 {
                 for y in -20..21 {
                     for z in -20..21 {
-                        positions.push(Position {
-                            x: x as f32 * 3.0,
-                            y: y as f32 * 3.0,
-                            z: z as f32 * 3.0,
-                        });
+                        let v = perlin.get([x as f64 / 20.0, y as f64 / 20.0, z as f64 / 20.0]);
+                        if v >= 0.0 {
+                            positions.push(Position {
+                                x: x as f32 * 3.0,
+                                y: y as f32 * 3.0,
+                                z: z as f32 * 3.0,
+                            });
+                        }
                     }
                 }
             }
         }
-        Self { positions }
+        Self {
+            positions,
+            players: HashMap::new(),
+        }
+    }
+
+    pub fn register_player(&mut self, uuid: Uuid, updates: &mut Vec<Update>) {
+        if let Entry::Vacant(entry) = self.players.entry(uuid) {
+            let player = Player {
+                position: Position {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            };
+            entry.insert(player.clone());
+            updates.push(Update::NewPlayer(uuid, player));
+        }
+    }
+
+    pub fn update_player_position(&mut self, uuid: Uuid, pos: Position, updates: &mut Vec<Update>) {
+        self.players.get_mut(&uuid).unwrap().position = pos;
+        updates.push(Update::PlayerPosition(uuid, pos))
     }
 }
 
@@ -45,7 +101,10 @@ impl Object for World {
     }
 
     fn serialize(&mut self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
-        self.positions.serialize(writer)
+        self.positions.serialize(writer)?;
+        serialize_into(writer, &self.players)
+            .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
+        Ok(())
     }
 
     fn deserialize(
@@ -53,6 +112,8 @@ impl Object for World {
         database: db::DatabaseRef,
     ) -> std::io::Result<Self> {
         let positions = db::Vec::deserialize(reader, database)?;
-        Ok(Self { positions })
+        let players = bincode::deserialize_from(reader)
+            .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
+        Ok(Self { positions, players })
     }
 }
