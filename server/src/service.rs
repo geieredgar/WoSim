@@ -3,17 +3,20 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     io,
+    string::FromUtf8Error,
     time::Duration,
 };
 
-use crate::{handle, Identity, Push, Request, ServerMessage, State, PROTOCOL};
+use crate::{handle, Push, Request, ServerMessage, State, User, PROTOCOL};
 use actor::{mailbox, Address, ControlFlow, SendError};
+use base64::DecodeError;
 use db::Database;
 use log::error;
 use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
 use tokio::{spawn, sync::oneshot};
+use uuid::Uuid;
 
 pub struct Service {
     name: String,
@@ -87,33 +90,48 @@ impl net::Service for Service {
         connection: Connection<Self::Push>,
         token: AuthToken,
     ) -> Result<Address<Self::Request>, Self::AuthError> {
-        let identity = Identity {
-            name: match token {
-                AuthToken::Local(token) => token,
-                AuthToken::Remote(token) => token,
-            }
-            .to_owned(),
+        let token = match token {
+            AuthToken::Local(token) => token,
+            AuthToken::Remote(token) => token,
+        };
+        let mut split = token.split('#');
+        let uuid = if let Some(uuid) = split.next() {
+            Uuid::parse_str(uuid).map_err(AuthenticationError::ParseUuid)?
+        } else {
+            return Err(AuthenticationError::EmptyToken);
+        };
+        let name = if let Some(username) = split.next() {
+            String::from_utf8(
+                base64::decode(username).map_err(AuthenticationError::DecodeUsername)?,
+            )
+            .map_err(AuthenticationError::IllformedUsername)?
+        } else {
+            return Err(AuthenticationError::MissingTokenSeparator);
+        };
+        let user = User {
+            uuid,
+            name,
             connection,
         };
         let (mut mailbox, address) = mailbox();
         {
             let address = self.address.clone();
             spawn(async move {
-                if let Err(error) = address.send(ServerMessage::Connected(identity.clone())) {
+                if let Err(error) = address.send(ServerMessage::Connected(user.clone())) {
                     error!("{}", error);
                     return;
                 }
                 {
                     while let Some(message) = mailbox.recv().await {
                         if let Err(error) =
-                            address.send(ServerMessage::Request(identity.clone(), message))
+                            address.send(ServerMessage::Request(user.clone(), message))
                         {
                             error!("{}", error);
                             return;
                         }
                     }
                 }
-                if let Err(error) = address.send(ServerMessage::Disconnected(identity)) {
+                if let Err(error) = address.send(ServerMessage::Disconnected(user)) {
                     error!("{}", error)
                 }
             });
@@ -161,7 +179,13 @@ impl net::Service for Service {
 }
 
 #[derive(Debug)]
-pub struct AuthenticationError {}
+pub enum AuthenticationError {
+    MissingTokenSeparator,
+    ParseUuid(uuid::Error),
+    DecodeUsername(DecodeError),
+    IllformedUsername(FromUtf8Error),
+    EmptyToken,
+}
 
 impl Display for AuthenticationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -1,16 +1,16 @@
 use net::{Message, OutgoingMessage};
 use tokio::sync::oneshot;
 
-use crate::{state::Position, Identity};
+use crate::{state::Position, User};
 
 #[derive(Debug)]
 pub struct Request;
 
 #[derive(Debug)]
 pub(crate) enum ServerMessage {
-    Connected(Identity),
-    Disconnected(Identity),
-    Request(Identity, Request),
+    Connected(User),
+    Disconnected(User),
+    Request(User, Request),
     Stop(oneshot::Sender<()>),
 }
 

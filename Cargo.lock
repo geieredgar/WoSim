@@ -4378,6 +4378,7 @@ dependencies = [
 name = "wosim-server"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "bytemuck",
  "ctrlc",
  "env_logger",
@@ -4387,6 +4388,7 @@ dependencies = [
  "semver 0.11.0",
  "serde",
  "tokio",
+ "uuid",
  "wosim-actor",
  "wosim-db",
  "wosim-net",
