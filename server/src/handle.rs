@@ -44,15 +44,12 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
                 observer.after_update = 0;
             }
         }
-        ServerMessage::Request(user, request) => {
-            info!("Request from client {}", user.name);
-            match request {
-                crate::Request::UpdatePosition(pos) => {
-                    let world: &mut World = &mut state.database;
-                    world.update_player_position(user.uuid, pos, &mut state.updates)
-                }
+        ServerMessage::Request(user, request) => match request {
+            crate::Request::UpdatePosition(pos) => {
+                let world: &mut World = &mut state.database;
+                world.update_player_position(user.uuid, pos, &mut state.updates)
             }
-        }
+        },
     }
     ControlFlow::Continue
 }
