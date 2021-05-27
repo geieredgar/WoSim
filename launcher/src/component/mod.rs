@@ -15,9 +15,8 @@ pub use world::*;
 use iced::{Align, Container, Element, Length, Row, Space, Text};
 
 use crate::{
-    icon::Icon,
     message::Message,
-    style::{BackgroundContainer, ForegroundContainer, PrimaryButton},
+    style::{BackgroundContainer, ForegroundContainer, LogoContainer},
     theme::Theme,
 };
 
@@ -35,13 +34,20 @@ pub fn header<'a>(
 ) -> Container<'a, Message> {
     Container::new(
         Row::new()
-            .push(Icon::Joystick.svg(32, 32, PrimaryButton(theme)))
             .push(
-                Text::new("WoSim")
-                    .size(30)
-                    .color(theme.colors().primary.bright),
+                Container::new(Text::new("Wo").size(30).color(theme.colors().background))
+                    .padding(3)
+                    .style(LogoContainer(theme)),
             )
-            .push(Space::with_width(Length::Units(10)))
+            .push(
+                Container::new(
+                    Text::new("Sim")
+                        .size(30)
+                        .color(theme.colors().primary.bright),
+                )
+                .padding(2),
+            )
+            .push(Space::with_width(Length::Units(20)))
             .push(content)
             .align_items(Align::Center)
             .width(Length::Fill),

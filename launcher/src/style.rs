@@ -11,7 +11,7 @@ pub struct SelectableButton(pub Theme, pub bool);
 pub struct ForegroundOption(pub Theme, pub bool);
 pub struct BackgroundContainer(pub Theme);
 pub struct ForegroundContainer(pub Theme, pub f32);
-
+pub struct LogoContainer(pub Theme);
 pub struct ButtonContainer(pub Theme);
 pub struct InlineButton(pub Theme);
 
@@ -181,6 +181,17 @@ impl container::StyleSheet for ForegroundContainer {
             background: Some(self.0.colors().foreground.into()),
             text_color: Some(self.0.colors().surface.bright.into()),
             border_radius: self.1,
+            ..Default::default()
+        }
+    }
+}
+
+impl container::StyleSheet for LogoContainer {
+    fn style(&self) -> container::Style {
+        container::Style {
+            background: Some(self.0.colors().primary.bright.into()),
+            text_color: Some(self.0.colors().foreground.into()),
+            border_radius: 5.0,
             ..Default::default()
         }
     }
