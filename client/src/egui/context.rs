@@ -22,7 +22,6 @@ use vulkan::{
 use crate::{
     error::Error,
     shaders::{EGUI_FRAG, EGUI_VERT},
-    ApplicationMessage,
 };
 
 use super::Font;
@@ -114,8 +113,8 @@ impl EguiContext {
         })
     }
 
-    pub fn handle_event(&mut self, message: &ApplicationMessage) -> HandleFlow {
-        if let ApplicationMessage::WindowEvent(event) = message {
+    pub fn handle_event(&mut self, event: &::winit::event::Event<()>) -> HandleFlow {
+        if let ::winit::event::Event::WindowEvent { event, .. } = event {
             match event {
                 WindowEvent::Resized(size) => {
                     let pixels_per_point = self
@@ -192,18 +191,21 @@ impl EguiContext {
                         }
                     }
                 }
+                WindowEvent::ScaleFactorChanged {
+                    scale_factor,
+                    new_inner_size,
+                } => {
+                    self.input.pixels_per_point = Some(*scale_factor as f32);
+                    self.input.screen_rect = Some(egui::Rect::from_min_size(
+                        Default::default(),
+                        Vec2 {
+                            x: new_inner_size.width as f32,
+                            y: new_inner_size.height as f32,
+                        } / self.scale_factor(),
+                    ));
+                }
                 _ => {}
             }
-        }
-        if let ApplicationMessage::ScaleFactorChanged(scale_factor, new_inner_size) = message {
-            self.input.pixels_per_point = Some(*scale_factor as f32);
-            self.input.screen_rect = Some(egui::Rect::from_min_size(
-                Default::default(),
-                Vec2 {
-                    x: new_inner_size.width as f32,
-                    y: new_inner_size.height as f32,
-                } / self.scale_factor(),
-            ));
         }
         HandleFlow::Unhandled
     }

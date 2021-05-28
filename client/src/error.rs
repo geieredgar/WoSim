@@ -1,6 +1,5 @@
 use std::{fmt::Display, io};
 
-use actor::SendError;
 use semver::{ReqParseError, SemVerError};
 use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
@@ -21,7 +20,6 @@ pub enum Error {
     SemVer(SemVerError),
     ReqParse(ReqParseError),
     Resolve(ResolveError),
-    Send(SendError),
 }
 
 impl std::error::Error for Error {}

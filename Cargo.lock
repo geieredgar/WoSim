@@ -4460,6 +4460,7 @@ dependencies = [
  "libmdns",
  "log",
  "quinn",
+ "quinn-proto",
  "rustls",
  "serde",
  "tokio",

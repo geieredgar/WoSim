@@ -11,6 +11,7 @@ use egui::{
     Align, Color32, CtxRef, DragValue, RadioButton, ScrollArea, Window,
 };
 use log::{set_max_level, Level, LevelFilter};
+use net::{ConnectionStats, ConnectionStatsDiff};
 use server::{Connection, Request};
 
 use crate::renderer::RenderTimestamps;
@@ -19,6 +20,8 @@ pub struct DebugContext {
     frame_count: usize,
     frames_per_second: usize,
     last_frame_count: usize,
+    last_stats: Option<ConnectionStats>,
+    stats_diff: ConnectionStatsDiff,
     last_second: Instant,
     frame_start: Instant,
     frame_times: VecDeque<(Instant, Instant, Option<RenderTimestamps>)>,
@@ -50,12 +53,21 @@ impl DebugContext {
         }
     }
 
-    pub fn end_frame(&mut self, last_timestamps: Option<RenderTimestamps>) {
+    pub fn end_frame(
+        &mut self,
+        last_timestamps: Option<RenderTimestamps>,
+        connection: &Connection<Request>,
+    ) {
         self.frame_count += 1;
         let now = Instant::now();
         if now.duration_since(self.last_second).as_secs() >= 1 {
+            let current_stats = connection.stats();
+            if let (Some(old_stats), Some(new_stats)) = (self.last_stats, current_stats) {
+                self.stats_diff = ConnectionStatsDiff::new(old_stats, new_stats);
+            }
             self.frames_per_second = self.frame_count - self.last_frame_count;
             self.last_frame_count = self.frame_count;
+            self.last_stats = current_stats;
             self.last_second += Duration::from_secs(1);
         }
         if let Some((_, _, timestamps)) = self.frame_times.back_mut() {
@@ -71,18 +83,22 @@ impl DebugContext {
         }
     }
 
-    fn render_information(
-        &mut self,
-        ctx: &CtxRef,
-        open: &mut bool,
-        connection: &Connection<Request>,
-    ) {
+    fn render_information(&mut self, ctx: &CtxRef, open: &mut bool) {
         Window::new("Information").open(open).show(ctx, |ui| {
             ui.label(format!(
                 "FPS: {} Frame Count: {}",
                 self.frames_per_second, self.frame_count
             ));
-            ui.label(format!("RTT: {}", connection.rtt().as_millis()));
+            if let Some(stats) = self.last_stats {
+                ui.label(format!(
+                    "RTT: {} TX: {} bytes/s, {} packets/s RX: {} bytes/s, {} packets/s",
+                    stats.path.rtt.as_millis(),
+                    self.stats_diff.tx.bytes,
+                    self.stats_diff.tx.datagrams,
+                    self.stats_diff.rx.bytes,
+                    self.stats_diff.rx.datagrams,
+                ));
+            }
         });
     }
 
@@ -228,13 +244,8 @@ impl DebugContext {
         });
     }
 
-    pub fn render(
-        &mut self,
-        ctx: &CtxRef,
-        windows: &mut DebugWindows,
-        connection: &Connection<Request>,
-    ) {
-        self.render_information(ctx, &mut windows.information, connection);
+    pub fn render(&mut self, ctx: &CtxRef, windows: &mut DebugWindows) {
+        self.render_information(ctx, &mut windows.information);
         self.render_frame_times(ctx, &mut windows.frame_times);
         self.render_log(ctx, &mut windows.log);
     }
@@ -247,6 +258,8 @@ impl Default for DebugContext {
             frames_per_second: 0,
             last_frame_count: 0,
             last_second: Instant::now(),
+            last_stats: None,
+            stats_diff: Default::default(),
             frame_start: Instant::now(),
             frame_times: VecDeque::new(),
             frame_times_secs: 10.0,
