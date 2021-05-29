@@ -1,27 +1,45 @@
 use std::{
-    env::var,
+    env::{var, VarError},
     fs::{create_dir_all, read_to_string, write},
+    io,
     path::Path,
 };
 
 use shaderc::{CompileOptions, Compiler, IncludeType, ResolvedInclude, ShaderKind};
+use thiserror::Error;
 
-use crate::Error;
+#[derive(Debug, Error)]
+#[error("could not initialize the shader compiler")]
+pub struct CompilerInitializationError;
 
-pub fn new_shader_compiler() -> Result<Compiler, Error> {
-    Compiler::new().ok_or(Error::MissingCompiler)
+#[derive(Debug, Error)]
+pub enum CompileError {
+    #[error("invalid OUT_DIR environment variable")]
+    OutDirVar(#[from] VarError),
+    #[error("reading source failed")]
+    ReadSource(#[source] io::Error),
+    #[error(transparent)]
+    Compile(#[from] shaderc::Error),
+    #[error("creating output directory failed")]
+    CreateOutputDir(#[source] io::Error),
+    #[error("writing output file failed")]
+    WriteOutput(#[source] io::Error),
 }
 
 pub trait CompilerExt {
-    fn compile(&mut self, path: &str) -> Result<(), Error>;
+    fn compile(&mut self, path: &str) -> Result<(), CompileError>;
+}
+
+pub fn new_shader_compiler() -> Result<Compiler, CompilerInitializationError> {
+    Compiler::new().ok_or(CompilerInitializationError)
 }
 
 impl CompilerExt for Compiler {
-    fn compile(&mut self, path: &str) -> Result<(), Error> {
+    fn compile(&mut self, path: &str) -> Result<(), CompileError> {
         let input_path = Path::new("shaders").join(path);
         let output_path = Path::new(&var("OUT_DIR")?).join(format!("{}.spv", path));
         println!("cargo:rerun-if-changed={}", input_path.to_str().unwrap());
-        let source_text = read_to_string(&input_path)?;
+        let source_text = read_to_string(&input_path).map_err(CompileError::ReadSource)?;
         let mut compile_options = CompileOptions::new().unwrap();
         compile_options.set_generate_debug_info();
         compile_options.set_include_callback(include_callback);
@@ -33,8 +51,8 @@ impl CompilerExt for Compiler {
             Some(&compile_options),
         )?;
         print_warnings(&artifact.get_warning_messages());
-        create_dir_all(output_path.parent().unwrap())?;
-        write(output_path, artifact.as_binary_u8())?;
+        create_dir_all(output_path.parent().unwrap()).map_err(CompileError::CreateOutputDir)?;
+        write(output_path, artifact.as_binary_u8()).map_err(CompileError::WriteOutput)?;
         Ok(())
     }
 }

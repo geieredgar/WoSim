@@ -1,6 +1,7 @@
-use build::{new_shader_compiler, CompilerExt, Error};
+use build::{new_shader_compiler, CompilerExt};
 
-fn main() -> Result<(), Error> {
+fn main() -> eyre::Result<()> {
+    stable_eyre::install()?;
     let mut compiler = new_shader_compiler()?;
     compiler.compile("cull.comp")?;
     compiler.compile("depth_pyramid.comp")?;

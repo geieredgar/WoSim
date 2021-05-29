@@ -30,3 +30,5 @@ winit = "0.24"
 
 [build-dependencies]
 build = { path = "../build", package = "wosim-build" }
+eyre = "0.6.5"
+stable-eyre = "0.2.2"
