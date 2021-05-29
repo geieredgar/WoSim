@@ -8,8 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{handle, Push, Request, ServerMessage, State, User, PROTOCOL};
-use actor::ControlFlow;
+use crate::{handle, ControlFlow, Push, Request, ServerMessage, State, User, PROTOCOL};
 use base64::DecodeError;
 use db::Database;
 use log::error;

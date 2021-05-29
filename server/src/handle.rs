@@ -1,9 +1,13 @@
 use std::{mem::swap, sync::Arc};
 
-use actor::ControlFlow;
 use log::info;
 
 use crate::{state::Observer, Push, SelfUpdate, ServerMessage, Setup, State, UpdateBatch, World};
+
+pub enum ControlFlow {
+    Continue,
+    Stop,
+}
 
 pub(super) async fn handle(state: &mut State, message: ServerMessage) -> ControlFlow {
     match message {
