@@ -99,6 +99,9 @@ impl Application {
                     break;
                 }
             }
+            if let Err(error) = proxy.send_event(ApplicationMessage::Disconnected) {
+                error!("{:?}", error);
+            };
         });
         if let Some(server) = &mut server {
             server.open().wrap_err("could not open server")?;
@@ -364,6 +367,9 @@ impl Application {
                         ApplicationMessage::Log(level, target, args) => {
                             self.context.debug.log(level, target, args);
                         }
+                        ApplicationMessage::Disconnected => {
+                            return Ok(ControlFlow::Exit);
+                        }
                     }
                 }
             }
@@ -514,6 +520,7 @@ impl Drop for Application {
 pub enum ApplicationMessage {
     Push(Push),
     Log(Level, String, String),
+    Disconnected,
 }
 
 struct ApplicationLogger {
