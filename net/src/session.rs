@@ -5,10 +5,12 @@ use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendSt
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     spawn,
-    sync::mpsc::{self, unbounded_channel, UnboundedReceiver},
+    sync::mpsc,
 };
 
 use crate::{IncomingMessage, Message, RecvError, SendError, Sender};
+
+const CHANNEL_BUFFER: usize = 16;
 
 pub(super) async fn session<M: Message>(
     bi_streams: IncomingBiStreams,
@@ -65,7 +67,7 @@ async fn bi_stream<M: Message>(
     let id = recv.read_u32().await.map_err(RecvError::ReadRequestId)?;
     if id == 0 {
         let mut count = 1;
-        let (send_channel, recv_channel) = unbounded_channel();
+        let (send_channel, recv_channel) = mpsc::channel(CHANNEL_BUFFER);
         spawn(async move {
             if let Err(error) = send_responses(send, recv_channel).await {
                 error!("{}", error);
@@ -101,7 +103,7 @@ async fn uni_stream<M: Message>(
 
 async fn send_responses(
     mut send: SendStream,
-    mut receiver: UnboundedReceiver<(u32, Bytes)>,
+    mut receiver: mpsc::Receiver<(u32, Bytes)>,
 ) -> Result<(), SendError> {
     while let Some((id, buf)) = receiver.recv().await {
         send.write_u32(id)

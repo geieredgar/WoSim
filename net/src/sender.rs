@@ -3,14 +3,14 @@ use bytes::Bytes;
 use log::error;
 use quinn::SendStream;
 use serde::Serialize;
-use tokio::{spawn, sync::mpsc::UnboundedSender};
+use tokio::{spawn, sync::mpsc};
 
 use crate::SendError;
 
 pub enum Sender {
     None,
     Unique(SendStream),
-    Shared(u32, UnboundedSender<(u32, Bytes)>),
+    Shared(u32, mpsc::Sender<(u32, Bytes)>),
 }
 
 impl Sender {
@@ -34,6 +34,7 @@ impl Sender {
             }
             Sender::Shared(id, send) => send
                 .send((id, buf.into()))
+                .await
                 .map_err(SendError::SendResponsePair)?,
         }
         Ok(())
