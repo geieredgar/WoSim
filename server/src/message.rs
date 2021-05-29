@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use net::{Message, OutgoingMessage};
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
@@ -24,7 +23,7 @@ pub(crate) enum ServerMessage {
     Connected(User),
     Disconnected(User),
     Request(User, Request),
-    Stop(oneshot::Sender<()>),
+    Stop,
     PushUpdates,
 }
 

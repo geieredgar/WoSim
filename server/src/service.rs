@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap, env::current_dir, fmt::Debug, io, string::FromUtf8Error, time::Duration,
+    collections::HashMap, env::current_dir, fmt::Debug, io, string::FromUtf8Error, sync::Mutex,
+    time::Duration,
 };
 
 use crate::{handle, ControlFlow, Push, Request, ServerMessage, State, User, PROTOCOL};
@@ -10,11 +11,7 @@ use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
 use thiserror::Error;
-use tokio::{
-    spawn,
-    sync::{mpsc, oneshot},
-    time::interval,
-};
+use tokio::{spawn, sync::mpsc, task::JoinHandle, time::interval};
 use uuid::Uuid;
 
 const CHANNEL_BOUND: usize = 16;
@@ -24,6 +21,7 @@ pub struct Service {
     certificate_chain: CertificateChain,
     private_key: PrivateKey,
     tx: mpsc::Sender<ServerMessage>,
+    handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[derive(Debug, Error)]
@@ -54,7 +52,7 @@ impl Service {
             .to_string();
         let (tx, mut rx) = mpsc::channel(CHANNEL_BOUND);
         let database = Database::open("world.db").map_err(CreateServiceError::OpenDatabase)?;
-        spawn(async move {
+        let handle = Mutex::new(Some(spawn(async move {
             let mut state = State {
                 database,
                 updates: Vec::new(),
@@ -65,7 +63,7 @@ impl Service {
                     return;
                 }
             }
-        });
+        })));
         {
             let tx = tx.clone();
             spawn(async move {
@@ -93,13 +91,13 @@ impl Service {
             certificate_chain,
             private_key,
             tx,
+            handle,
         })
     }
 
     pub async fn stop(&self) {
-        let (send, recv) = oneshot::channel();
-        self.tx.send(ServerMessage::Stop(send)).await.unwrap();
-        recv.await.unwrap();
+        self.tx.send(ServerMessage::Stop).await.unwrap();
+        self.handle.lock().unwrap().take().unwrap().await.unwrap();
     }
 }
 

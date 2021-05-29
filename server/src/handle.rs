@@ -11,9 +11,8 @@ pub enum ControlFlow {
 
 pub(super) async fn handle(state: &mut State, message: ServerMessage) -> ControlFlow {
     match message {
-        ServerMessage::Stop(ret) => {
+        ServerMessage::Stop => {
             state.database.snapshot().unwrap();
-            ret.send(()).unwrap();
             return ControlFlow::Stop;
         }
         ServerMessage::Connected(user) => {
