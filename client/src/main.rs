@@ -382,8 +382,8 @@ impl Application {
         self.connection.send(Request::Shutdown).await?;
         self.handle.take().unwrap().await?;
         if let Some(server) = self.server.as_mut() {
-            server.close();
             server.service().stop().await;
+            server.close();
         }
         Ok(())
     }
