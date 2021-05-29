@@ -2,6 +2,7 @@ use std::{io, sync::Arc};
 
 use net::{ResolveSuccess, Verification};
 use server::{create_world, AuthenticationError, CreateServiceError, Service};
+use thiserror::Error;
 
 pub enum Resolver {
     Create {
@@ -20,16 +21,19 @@ pub enum Resolver {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ResolveError {
-    CreateWorld(io::Error),
-    CreateService(CreateServiceError),
-    Resolve(net::ResolveError<AuthenticationError>),
+    #[error("could not create world")]
+    CreateWorld(#[source] io::Error),
+    #[error("could not create service")]
+    CreateService(#[source] CreateServiceError),
+    #[error(transparent)]
+    Resolve(#[from] net::ResolveError<AuthenticationError>),
 }
 
 impl Resolver {
     pub async fn resolve(self) -> Result<ResolveSuccess<Service>, ResolveError> {
-        match self {
+        Ok(match self {
             Resolver::Create { token, port } => {
                 create_world().map_err(ResolveError::CreateWorld)?;
                 net::Resolver::Local {
@@ -60,7 +64,6 @@ impl Resolver {
             },
         }
         .resolve()
-        .await
-        .map_err(ResolveError::Resolve)
+        .await?)
     }
 }

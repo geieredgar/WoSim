@@ -12,8 +12,6 @@ use vulkan::{
     VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
 };
 
-use crate::error::Error;
-
 use super::EguiContext;
 
 pub struct EguiView {
@@ -29,7 +27,7 @@ impl EguiView {
         _image_format: Format,
         render_pass: &RenderPass,
         subpass_index: u32,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let binding_descriptions = [VertexInputBindingDescription::builder()
             .binding(0)
             .input_rate(VertexInputRate::VERTEX)

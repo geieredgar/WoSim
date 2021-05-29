@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
+use ::vulkan::{Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::event::Event;
 use ::winit::event_loop::EventLoop;
 use ::winit::event_loop::EventLoopProxy;
@@ -16,13 +16,14 @@ use ::winit::{
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
-use error::Error;
+use eyre::{eyre, Context as EyreContext};
 use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::Level;
 use log::{error, LevelFilter, Log};
 use nalgebra::Rotation3;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use net::Server;
+use renderer::RenderError;
 use renderer::Renderer;
 use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
@@ -43,7 +44,6 @@ mod cull;
 mod debug;
 mod depth;
 mod egui;
-mod error;
 mod frame;
 mod renderer;
 mod resolver;
@@ -77,35 +77,41 @@ impl Application {
     async fn new(
         event_loop: &EventLoop<ApplicationMessage>,
         resolver: Resolver,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         log::set_boxed_logger(Box::new(ApplicationLogger {
             proxy: Mutex::new(event_loop.create_proxy()),
             secondary: env_logger::builder().build(),
         }))
-        .unwrap();
+        .wrap_err("could not set logger")?;
         log::set_max_level(LevelFilter::Warn);
         let window = WindowBuilder::new()
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
-        let (connection, mut mailbox, mut server) = resolver.resolve().await?;
+        let (connection, mut mailbox, mut server) = resolver
+            .resolve()
+            .await
+            .wrap_err("could not connect to server")?;
         let proxy = event_loop.create_proxy();
         let handle = spawn(async move {
             while let Some(message) = mailbox.recv().await {
                 if let Err(error) = proxy.send_event(ApplicationMessage::Push(message)) {
-                    error!("{}", error);
+                    error!("{:?}", error);
                     break;
                 }
             }
         });
         if let Some(server) = &mut server {
-            server.open().unwrap();
+            server.open().wrap_err("could not open server")?;
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
-        let instance = Arc::new(Instance::new(
-            &CString::new("wosim").unwrap(),
-            version,
-            enumerate_required_extensions(&window)?,
-        )?);
+        let instance = Arc::new(
+            Instance::new(
+                &CString::new("wosim").unwrap(),
+                version,
+                enumerate_required_extensions(&window)?,
+            )
+            .wrap_err("could not create instance")?,
+        );
         let surface = instance.create_surface(|entry, instance| unsafe {
             create_surface(entry, instance, &window, None)
         })?;
@@ -113,8 +119,9 @@ impl Application {
             .physical_devices()?
             .into_iter()
             .max_ok_filter_map(|physical_device| DeviceCandidate::new(physical_device, &surface))?
-            .ok_or(Error::NoSuitableDeviceFound)?
-            .create()?;
+            .ok_or_else(|| eyre!("could not find suitable device"))?
+            .create()
+            .wrap_err("could not create device")?;
         let device = Arc::new(device);
         let context = Context::new(&device, render_configuration, window.scale_factor() as f32)?;
         let swapchain = Arc::new(create_swapchain(&device, &surface, &window, false, None)?);
@@ -147,10 +154,7 @@ impl Application {
         })
     }
 
-    async fn handle(
-        &mut self,
-        event: Event<'_, ApplicationMessage>,
-    ) -> Result<::winit::event_loop::ControlFlow, Error> {
+    async fn handle(&mut self, event: Event<'_, ApplicationMessage>) -> eyre::Result<ControlFlow> {
         match event.map_nonuser_event() {
             Ok(event) => {
                 if self.handle_early_mouse_grab(&event).is_handled() {
@@ -368,7 +372,7 @@ impl Application {
         Ok(ControlFlow::Poll)
     }
 
-    async fn shutdown(&mut self) -> Result<(), Error> {
+    async fn shutdown(&mut self) -> eyre::Result<()> {
         self.connection.send(Request::Shutdown).await?;
         self.handle.take().unwrap().await?;
         if let Some(server) = self.server.as_mut() {
@@ -382,7 +386,7 @@ impl Application {
         !self.uuid.is_nil()
     }
 
-    async fn render(&mut self) -> Result<(), Error> {
+    async fn render(&mut self) -> eyre::Result<()> {
         if self.is_setup() {
             self.update().await;
             self.context.debug.begin_frame();
@@ -395,17 +399,8 @@ impl Application {
             let (resize, timestamps) = match result {
                 Ok(result) => (result.suboptimal, result.timestamps),
                 Err(err) => match err {
-                    Error::Vulkan(vulkan_err) => match vulkan_err {
-                        ::vulkan::Error::ApiResult(result) => {
-                            if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                                (true, None)
-                            } else {
-                                return Err(Error::Vulkan(vulkan_err));
-                            }
-                        }
-                        _ => return Err(Error::Vulkan(vulkan_err)),
-                    },
-                    _ => return Err(err),
+                    RenderError::Error(error) => return Err(error),
+                    RenderError::OutOfDate => (true, None),
                 },
             };
             self.context.debug.end_frame(timestamps, &self.connection);
@@ -429,7 +424,7 @@ impl Application {
         HandleFlow::Unhandled
     }
 
-    fn recreate_swapchain(&mut self) -> Result<(), Error> {
+    fn recreate_swapchain(&mut self) -> eyre::Result<()> {
         self.device.wait_idle()?;
         self.swapchain = Arc::new(create_swapchain(
             &self.device,
@@ -486,7 +481,7 @@ impl Application {
         }
     }
 
-    fn set_grab(&mut self, grab: bool) -> Result<(), Error> {
+    fn set_grab(&mut self, grab: bool) -> eyre::Result<()> {
         if self.grab == grab {
             return Ok(());
         }
@@ -561,16 +556,16 @@ fn create_swapchain(
     window: &Window,
     disable_vsync: bool,
     previous: Option<&Swapchain>,
-) -> Result<Swapchain, Error> {
+) -> eyre::Result<Swapchain> {
     let extent = window.inner_size();
     let extent = Extent2D {
         width: extent.width,
         height: extent.height,
     };
     let surface_format = choose_surface_format(device.physical_device(), surface)?
-        .ok_or(Error::NoSuitableSurfaceFormat)?;
+        .ok_or_else(|| eyre!("could not find suitable surface format"))?;
     let present_mode = choose_present_mode(device.physical_device(), surface, disable_vsync)?
-        .ok_or(Error::NoSuitablePresentMode)?;
+        .ok_or_else(|| eyre!("could not find suitable present mode"))?;
     let configuration = SwapchainConfiguration {
         surface,
         previous,
@@ -623,7 +618,7 @@ enum DebugCommand {
 }
 
 impl Command {
-    fn run(self) -> Result<(), Error> {
+    fn run(self) -> eyre::Result<()> {
         match self {
             Command::Join {
                 hostname,
@@ -684,7 +679,8 @@ fn setup_env() {
     std::env::set_var("MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE", "1");
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> eyre::Result<()> {
+    stable_eyre::install()?;
     setup_env();
     Command::from_args().run()
 }
@@ -698,7 +694,7 @@ impl Runner {
     pub fn new(
         event_loop: &EventLoop<ApplicationMessage>,
         resolver: Resolver,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let runtime = Runtime::new()?;
         let _guard = runtime.enter();
         let application = runtime.block_on(Application::new(event_loop, resolver))?;
@@ -708,18 +704,18 @@ impl Runner {
         })
     }
 
-    pub fn handle(&mut self, event: Event<ApplicationMessage>) -> Result<ControlFlow, Error> {
+    pub fn handle(&mut self, event: Event<ApplicationMessage>) -> eyre::Result<ControlFlow> {
         let _guard = self.runtime.enter();
         self.runtime.block_on(self.application.handle(event))
     }
 
-    pub fn run(resolver: Resolver) -> Result<(), Error> {
+    pub fn run(resolver: Resolver) -> eyre::Result<()> {
         let event_loop = EventLoop::with_user_event();
         let mut runner = Runner::new(&event_loop, resolver)?;
         event_loop.run(move |event, _, control_flow| match runner.handle(event) {
             Ok(flow) => *control_flow = flow,
             Err(error) => {
-                error!("{}", error);
+                error!("{:?}", error);
                 *control_flow = ControlFlow::Exit;
             }
         });
@@ -730,7 +726,7 @@ impl Drop for Runner {
     fn drop(&mut self) {
         let _guard = self.runtime.enter();
         if let Err(error) = self.runtime.block_on(self.application.shutdown()) {
-            error!("{}", error);
+            error!("{:?}", error);
         }
     }
 }

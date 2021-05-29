@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use eyre::Context as EyreContext;
 use nalgebra::{RealField, Translation3, Vector3};
 
 use vulkan::{
@@ -12,7 +13,6 @@ use crate::{
     debug::DebugContext,
     depth::DepthContext,
     egui::EguiContext,
-    error::Error,
     frame::Frame,
     renderer::RenderConfiguration,
     scene::{Camera, MeshData, Model, SceneContext, Sphere, Vertex},
@@ -37,7 +37,7 @@ impl Context {
         device: &Arc<Device>,
         configuration: RenderConfiguration,
         scale_factor: f32,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let pipeline_cache =
             device.create_pipeline_cache(PipelineCacheCreateFlags::empty(), None)?;
         let camera = Camera {
@@ -100,7 +100,7 @@ impl Context {
             },
             mesh: cube_mesh,
         });
-        scene.flush()?;
+        scene.flush().wrap_err("could not flush scene buffers")?;
         let command_pool = device.create_command_pool(
             CommandPoolCreateFlags::TRANSIENT,
             device.main_queue_family_index(),

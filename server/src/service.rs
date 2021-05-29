@@ -26,15 +26,22 @@ pub struct Service {
     tx: mpsc::Sender<ServerMessage>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CreateServiceError {
-    NoCurrentDir(io::Error),
+    #[error("could not find current working directory")]
+    NoCurrentDir(#[source] io::Error),
+    #[error("cannot create service in root directory")]
     CurrentDirIsRootDir,
-    OpenDatabase(io::Error),
-    GenerateCertificates(RcgenError),
-    ParsePrivateKey(ParseError),
-    SerializeCertificate(RcgenError),
-    ParseCertificate(ParseError),
+    #[error("could not open database")]
+    OpenDatabase(#[source] io::Error),
+    #[error("could not generate self-signed certificates")]
+    GenerateCertificates(#[source] RcgenError),
+    #[error("could not parse private key")]
+    ParsePrivateKey(#[source] ParseError),
+    #[error("could not serialize certificate")]
+    SerializeCertificate(#[source] RcgenError),
+    #[error("could not parse certificate")]
+    ParseCertificate(#[source] ParseError),
 }
 
 impl Service {

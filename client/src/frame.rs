@@ -1,5 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
+use eyre::Context as EyreContext;
 use vulkan::{
     AccessFlags, BufferCopy, BufferMemoryBarrier, ClearColorValue, ClearDepthStencilValue,
     ClearValue, CommandBuffer, CommandBufferLevel, CommandBufferUsageFlags, CommandPool,
@@ -13,8 +14,7 @@ use crate::{
     context::Context,
     cull::CullFrame,
     egui::EguiFrame,
-    error::Error,
-    renderer::{RenderResult, RenderTimestamps},
+    renderer::{RenderError, RenderResult, RenderTimestamps},
     scene::SceneFrame,
     view::View,
 };
@@ -32,7 +32,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn new(device: &Arc<Device>, context: &Context) -> Result<Self, Error> {
+    pub fn new(device: &Arc<Device>, context: &Context) -> eyre::Result<Self> {
         let command_pool = device.create_command_pool(
             CommandPoolCreateFlags::TRANSIENT,
             device.main_queue_family_index(),
@@ -47,20 +47,23 @@ impl Frame {
         let main_queue_fence = device.create_fence(FenceCreateFlags::SIGNALED)?;
         let image_ready = device.create_semaphore()?;
         let render_finished = device.create_semaphore()?;
-        let egui = EguiFrame::new(device, &context.egui, &context.descriptor_pool)?;
+        let egui = EguiFrame::new(device, &context.egui, &context.descriptor_pool)
+            .wrap_err("could not create egui frame data")?;
         let scene = SceneFrame::new(
             device,
             &context.scene,
             2usize.pow(20),
             &context.descriptor_pool,
-        )?;
+        )
+        .wrap_err("could not create scene frame data")?;
         let cull = CullFrame::new(
             device,
             &context.cull,
             &context.scene,
             &scene,
             &context.descriptor_pool,
-        )?;
+        )
+        .wrap_err("could not create cull frame data")?;
         Ok(Self {
             cull,
             scene,
@@ -83,11 +86,12 @@ impl Frame {
         device: &Arc<Device>,
         context: &mut Context,
         view: &View,
-    ) -> Result<RenderResult, Error> {
+    ) -> Result<RenderResult, RenderError> {
         self.main_queue_fence.wait()?;
         let last_draw_count = self
             .scene
-            .update(&context.scene, view.swapchain.image_extent())?;
+            .update(&context.scene, view.swapchain.image_extent())
+            .wrap_err("could not update scene frame data")?;
         self.main_queue_fence.reset()?;
         let timestamps: Option<Vec<u64>> =
             self.timestamp_pool
@@ -103,7 +107,8 @@ impl Frame {
             0,
         );
         self.egui
-            .prepare(device, &self.command_buffer, &mut context.egui)?;
+            .prepare(device, &self.command_buffer, &mut context.egui)
+            .wrap_err("could not prepare egui rendering")?;
         self.command_buffer
             .fill_buffer(&self.scene.draw_count, 0, size_of::<u32>() as u64, 0);
         let buffer_memory_barriers = [BufferMemoryBarrier::builder()
@@ -204,12 +209,14 @@ impl Frame {
             context.configuration.use_draw_count,
         );
         self.command_buffer.next_subpass(SubpassContents::INLINE);
-        self.egui.render(
-            &self.command_buffer,
-            &view.egui,
-            &mut context.egui,
-            view.swapchain.image_extent(),
-        )?;
+        self.egui
+            .render(
+                &self.command_buffer,
+                &view.egui,
+                &mut context.egui,
+                view.swapchain.image_extent(),
+            )
+            .wrap_err("could not render egui")?;
         self.command_buffer.end_render_pass();
         self.command_buffer.write_timestamp(
             PipelineStageFlags::BOTTOM_OF_PIPE,

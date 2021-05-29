@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     io,
     net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     str::FromStr,
@@ -9,6 +10,7 @@ use quinn::{
     ClientConfigBuilder, ConnectError, ConnectionError, Endpoint, EndpointError, NewConnection,
     WriteError,
 };
+use thiserror::Error;
 use tokio::{spawn, sync::mpsc};
 
 use crate::{recv, send, AuthToken, Connection, Server, Service, Verification};
@@ -36,18 +38,28 @@ pub type ResolveSuccess<S> = (
     mpsc::Receiver<<S as Service>::Push>,
     Option<Server<S>>,
 );
-#[derive(Debug)]
-pub enum ResolveError<A> {
-    TokenAuthentication(A),
-    InvalidCaCertificates(webpki::Error),
-    Bind(EndpointError),
-    IpResolution(io::Error),
+#[derive(Debug, Error)]
+pub enum ResolveError<A: Error + 'static> {
+    #[error("could not authenticate token")]
+    TokenAuthentication(#[source] A),
+    #[error("certificate authority has invalid certificate")]
+    InvalidCaCertificates(#[source] webpki::Error),
+    #[error("could not bind to endpoint")]
+    Bind(#[source] EndpointError),
+    #[error("could not resolve ip address")]
+    IpResolution(#[source] io::Error),
+    #[error("could not find a socket address")]
     NoSocketAddrFound,
-    Connect(ConnectError),
-    Connecting(ConnectionError),
-    OpenTokenStream(ConnectionError),
-    WriteTokenStream(WriteError),
-    FinishTokenStream(WriteError),
+    #[error("could not connect to server")]
+    Connect(#[source] ConnectError),
+    #[error("could not connect to server")]
+    Connecting(#[source] ConnectionError),
+    #[error("could not open stream for to send token")]
+    OpenTokenStream(#[source] ConnectionError),
+    #[error("could not write to token stream")]
+    WriteTokenStream(#[source] WriteError),
+    #[error("could not finish token stream")]
+    FinishTokenStream(#[source] WriteError),
 }
 
 impl<S: Service> Resolver<S> {

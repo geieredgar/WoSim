@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use eyre::Context as EyreContext;
 use vulkan::{
     mip_levels_for_extent, AccessFlags, ApiResult, AttachmentDescription, AttachmentLoadOp,
     AttachmentReference, AttachmentStoreOp, ClearColorValue, CommandBufferUsageFlags,
@@ -9,7 +10,7 @@ use vulkan::{
     SubpassDependency, SubpassDescription, Swapchain, SwapchainImage, SUBPASS_EXTERNAL,
 };
 
-use crate::{context::Context, depth::DepthView, egui::EguiView, error::Error, scene::SceneView};
+use crate::{context::Context, depth::DepthView, egui::EguiView, scene::SceneView};
 
 pub struct View {
     pub depth: DepthView,
@@ -26,7 +27,7 @@ impl View {
         device: &Arc<Device>,
         context: &Context,
         swapchain: Arc<Swapchain>,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let image_format = swapchain.image_format();
         let attachments = [
             AttachmentDescription::builder()
@@ -142,21 +143,24 @@ impl View {
             image_format,
             &render_pass,
             2,
-        )?;
+        )
+        .wrap_err("could not create egui view")?;
         let scene = SceneView::new(
             &context.scene,
             &render_pass,
             &context.pipeline_cache,
             0,
             image_extent,
-        )?;
+        )
+        .wrap_err("could not create scene view")?;
         let depth = DepthView::new(
             device,
             &context.depth,
             &context.configuration,
             image_extent,
             depth_pyramid_mip_levels,
-        )?;
+        )
+        .wrap_err("could not create depth view")?;
         let framebuffers: Result<_, ApiResult> = images
             .iter()
             .map(|image| {

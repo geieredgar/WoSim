@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use eyre::Context;
 use util::shader::align_bytes;
 use vulkan::{
     BufferUsageFlags, DescriptorSetLayout, DescriptorSetLayoutBinding,
@@ -7,10 +8,7 @@ use vulkan::{
     PipelineLayoutCreateFlags, ShaderModule, ShaderModuleCreateFlags, ShaderStageFlags,
 };
 
-use crate::{
-    error::Error,
-    shaders::{SCENE_FRAG, SCENE_VERT},
-};
+use crate::shaders::{SCENE_FRAG, SCENE_VERT};
 
 use super::{Camera, Mesh, MeshData, Model, Object, Vertex};
 
@@ -33,7 +31,7 @@ impl SceneContext {
         index_capacity: usize,
         model_capacity: usize,
         camera: Camera,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let vertex_shader_module = device.create_shader_module(
             ShaderModuleCreateFlags::empty(),
             &align_bytes(SCENE_VERT.load()?.bytes()),
@@ -69,21 +67,27 @@ impl SceneContext {
             fragment_shader_module,
             set_layout,
             pipeline_layout,
-            vertices: device.create_vec(
-                vertex_capacity,
-                BufferUsageFlags::VERTEX_BUFFER,
-                MemoryUsage::CpuToGpu,
-            )?,
-            vertex_indices: device.create_vec(
-                index_capacity,
-                BufferUsageFlags::INDEX_BUFFER,
-                MemoryUsage::CpuToGpu,
-            )?,
-            models: device.create_vec(
-                model_capacity,
-                BufferUsageFlags::STORAGE_BUFFER,
-                MemoryUsage::CpuToGpu,
-            )?,
+            vertices: device
+                .create_vec(
+                    vertex_capacity,
+                    BufferUsageFlags::VERTEX_BUFFER,
+                    MemoryUsage::CpuToGpu,
+                )
+                .wrap_err("could not create vertex gpu vector")?,
+            vertex_indices: device
+                .create_vec(
+                    index_capacity,
+                    BufferUsageFlags::INDEX_BUFFER,
+                    MemoryUsage::CpuToGpu,
+                )
+                .wrap_err("could not create index gpu vector")?,
+            models: device
+                .create_vec(
+                    model_capacity,
+                    BufferUsageFlags::STORAGE_BUFFER,
+                    MemoryUsage::CpuToGpu,
+                )
+                .wrap_err("could not create model gpu vector")?,
             groups: Vec::new(),
             camera,
         })

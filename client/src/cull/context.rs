@@ -9,7 +9,7 @@ use vulkan::{
     Zeroable,
 };
 
-use crate::{error::Error, shaders::CULL_COMP};
+use crate::shaders::CULL_COMP;
 
 pub struct CullContext {
     pub pipeline: Pipeline,
@@ -30,7 +30,7 @@ impl CullContext {
         device: &Arc<Device>,
         use_draw_count: Bool32,
         pipeline_cache: &PipelineCache,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let shader_module = device.create_shader_module(
             ShaderModuleCreateFlags::empty(),
             &align_bytes(CULL_COMP.load()?.bytes()),
