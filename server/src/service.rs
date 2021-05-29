@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{handle, Push, Request, ServerMessage, State, User, PROTOCOL};
-use actor::{ControlFlow, SendError};
+use actor::ControlFlow;
 use base64::DecodeError;
 use db::Database;
 use log::error;
@@ -95,11 +95,10 @@ impl Service {
         })
     }
 
-    pub async fn stop(&self) -> Result<(), SendError> {
+    pub async fn stop(&self) {
         let (send, recv) = oneshot::channel();
-        self.tx.send(ServerMessage::Stop(send)).await?;
+        self.tx.send(ServerMessage::Stop(send)).await.unwrap();
         recv.await.unwrap();
-        Ok(())
     }
 }
 

@@ -1,6 +1,5 @@
 use std::{error::Error as StdError, fmt::Display, sync::Arc};
 
-use actor::Address;
 use bytes::{Buf, Bytes, BytesMut};
 use log::error;
 use quinn::{RecvStream, SendStream, VarInt};
@@ -8,24 +7,24 @@ use tokio::{
     io::AsyncReadExt,
     io::AsyncWriteExt,
     spawn,
-    sync::{
-        mpsc::{self, unbounded_channel, UnboundedReceiver},
-        oneshot::Sender,
-    },
+    sync::{mpsc, oneshot::Sender},
 };
 
 pub use quinn_proto::ConnectionStats;
 
 use crate::{Message, RecvError, RecvQueue, SendError};
 
+const CHANNEL_BUFFER: usize = 16;
+
 #[derive(Debug)]
-pub enum Connection<M: Message + 'static> {
+pub enum Connection<M: Message> {
     Local(mpsc::Sender<M>),
-    Remote(RemoteConnection),
+    Remote(RemoteConnection<M>),
 }
 
-#[derive(Clone, Debug)]
-pub struct RemoteConnection {
+#[derive(Debug)]
+pub struct RemoteConnection<M: Message> {
+    tx: mpsc::Sender<M>,
     inner: quinn::Connection,
     closer: Arc<AutoCloser>,
 }
@@ -34,61 +33,25 @@ pub struct RemoteConnection {
 struct AutoCloser(quinn::Connection);
 
 impl<M: Message> Connection<M> {
-    pub fn asynchronous(&self) -> Address<M> {
+    pub fn asynchronous(&self) -> mpsc::Sender<M> {
         match self {
-            Connection::Local(tx) => {
-                let tx = tx.clone();
-                Address::new(move |message: M| {
-                    let tx = tx.clone();
-                    spawn(async move {
-                        if let Err(error) = tx.send(message).await {
-                            error!("{}", error);
-                        }
-                    });
-                    Ok(())
-                })
-            }
-            Connection::Remote(connection) => {
-                let connection = connection.clone();
-                Address::new(move |message: M| {
-                    let connection = connection.clone();
-                    spawn(async move {
-                        if let Err(error) = send_message(connection, message).await {
-                            error!("{}", error);
-                        }
-                    });
-                    Ok(())
-                })
-            }
+            Connection::Local(tx) => tx.clone(),
+            Connection::Remote(connection) => connection.tx.clone(),
         }
     }
 
-    pub fn synchronous(&self) -> Address<M> {
+    pub fn synchronous(&self) -> mpsc::Sender<M> {
         match self {
-            Connection::Local(tx) => {
-                let tx = tx.clone();
-                Address::new(move |message: M| {
-                    let tx = tx.clone();
-                    spawn(async move {
-                        if let Err(error) = tx.send(message).await {
-                            error!("{}", error);
-                        }
-                    });
-                    Ok(())
-                })
-            }
+            Connection::Local(tx) => tx.clone(),
             Connection::Remote(connection) => {
-                let (send, recv) = unbounded_channel();
+                let (send, recv) = mpsc::channel(CHANNEL_BUFFER);
                 let connection = connection.clone();
                 spawn(async move {
                     if let Err(error) = send_messages(connection, recv).await {
                         error!("{}", error)
                     }
                 });
-                Address::new(move |message: M| match send.send(message) {
-                    Ok(_) => Ok(()),
-                    Err(error) => Err(Box::new(error)),
-                })
+                send
             }
         }
     }
@@ -110,12 +73,37 @@ impl<M: Message + 'static> Clone for Connection<M> {
     }
 }
 
-impl RemoteConnection {
+impl<M: Message> RemoteConnection<M> {
     pub fn new(connection: quinn::Connection) -> Self {
         let closer = Arc::new(AutoCloser(connection.clone()));
+        let (tx, mut rx) = mpsc::channel(CHANNEL_BUFFER);
+        {
+            let connection = connection.clone();
+            spawn(async move {
+                while let Some(message) = rx.recv().await {
+                    let connection = connection.clone();
+                    spawn(async move {
+                        if let Err(error) = send_message(connection, message).await {
+                            error!("{}", error)
+                        }
+                    });
+                }
+            });
+        }
         Self {
+            tx,
             inner: connection,
             closer,
+        }
+    }
+}
+
+impl<M: Message> Clone for RemoteConnection<M> {
+    fn clone(&self) -> Self {
+        Self {
+            tx: self.tx.clone(),
+            closer: self.closer.clone(),
+            inner: self.inner.clone(),
         }
     }
 }
@@ -182,27 +170,18 @@ impl From<RecvError> for Error {
     }
 }
 
-async fn send_message<M: Message>(connection: RemoteConnection, message: M) -> Result<(), Error> {
+async fn send_message<M: Message>(connection: quinn::Connection, message: M) -> Result<(), Error> {
     let message = message.into_outgoing().map_err(SendError::IntoOutgoing)?;
     match message.ty {
         crate::MessageType::Datagram => connection
-            .inner
             .send_datagram(message.packet)
             .map_err(SendError::SendDatagram)?,
         crate::MessageType::Uni => {
-            let send = connection
-                .inner
-                .open_uni()
-                .await
-                .map_err(SendError::OpenStream)?;
+            let send = connection.open_uni().await.map_err(SendError::OpenStream)?;
             send_request_and_finish(send, message.packet).await?
         }
         crate::MessageType::Bi(sender, size_limit) => {
-            let (send, mut recv) = connection
-                .inner
-                .open_bi()
-                .await
-                .map_err(SendError::OpenStream)?;
+            let (send, mut recv) = connection.open_bi().await.map_err(SendError::OpenStream)?;
             send_request_and_finish(send, message.packet).await?;
             recv_response(&mut recv, sender, size_limit).await?;
         }
@@ -247,8 +226,8 @@ async fn recv_response(
 }
 
 async fn send_messages<M: Message>(
-    connection: RemoteConnection,
-    mut recv: UnboundedReceiver<M>,
+    connection: RemoteConnection<M>,
+    mut recv: mpsc::Receiver<M>,
 ) -> Result<(), SendError> {
     let queue = RecvQueue::new();
     let mut send = {

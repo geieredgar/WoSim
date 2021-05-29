@@ -21,11 +21,14 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
                 sync_push: user.connection.synchronous(),
                 after_update: state.updates.len(),
             };
-            let _ = observer.sync_push.send(Push::Setup(Setup(
-                user.uuid,
-                world.players.clone(),
-                positions,
-            )));
+            let _ = observer
+                .sync_push
+                .send(Push::Setup(Setup(
+                    user.uuid,
+                    world.players.clone(),
+                    positions,
+                )))
+                .await;
             state.observers.insert(user.uuid, observer);
         }
         ServerMessage::Disconnected(user) => {
@@ -37,10 +40,13 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             swap(&mut state.updates, &mut updates);
             let updates = Arc::new(updates);
             for (_, observer) in state.observers.iter_mut() {
-                let _ = observer.sync_push.send(Push::Updates(UpdateBatch(
-                    updates.clone(),
-                    observer.after_update,
-                )));
+                let _ = observer
+                    .sync_push
+                    .send(Push::Updates(UpdateBatch(
+                        updates.clone(),
+                        observer.after_update,
+                    )))
+                    .await;
                 observer.after_update = 0;
             }
         }

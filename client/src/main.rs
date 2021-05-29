@@ -7,13 +7,13 @@ use crate::winit::run;
 use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::event::Event;
 use ::winit::event_loop::EventLoop;
+use ::winit::event_loop::EventLoopProxy;
 use ::winit::{
     dpi::PhysicalPosition,
     event::{DeviceEvent, ElementState, MouseButton, VirtualKeyCode, WindowEvent},
     event_loop::ControlFlow,
     window::{Fullscreen, Window, WindowBuilder},
 };
-use actor::Address;
 use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
@@ -35,6 +35,7 @@ use server::{
     Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
 };
 use structopt::StructOpt;
+use tokio::runtime::Handle;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 use uuid::Uuid;
@@ -166,10 +167,8 @@ impl Application {
         let duration = now.duration_since(self.last_server_update);
         if duration.as_millis() > 1000 / 30 && self.is_setup() {
             self.last_server_update = now;
-            let _ = self
-                .connection
-                .asynchronous()
-                .send(Request::UpdateSelf(SelfUpdate(
+            let _ = Handle::current().block_on(self.connection.asynchronous().send(
+                Request::UpdateSelf(SelfUpdate(
                     Position {
                         x: self.context.scene.camera.translation.vector[0],
                         y: self.context.scene.camera.translation.vector[1],
@@ -180,7 +179,8 @@ impl Application {
                         pitch: self.context.scene.camera.pitch,
                         yaw: self.context.scene.camera.yaw,
                     },
-                )));
+                )),
+            ));
         }
     }
 
@@ -219,11 +219,8 @@ impl winit::Application for Application {
         runtime: &Runtime,
         resolver: Resolver,
     ) -> Result<Self, Self::Error> {
-        let proxy = Arc::new(Mutex::new(event_loop.create_proxy()));
-        let address =
-            Address::new(move |m| proxy.lock().unwrap().send_event(m).map_err(|e| e.into()));
         log::set_boxed_logger(Box::new(ApplicationLogger {
-            address: address.clone(),
+            proxy: Mutex::new(event_loop.create_proxy()),
             secondary: env_logger::builder().build(),
         }))
         .unwrap();
@@ -232,9 +229,10 @@ impl winit::Application for Application {
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
         let (connection, mut mailbox, mut server) = runtime.block_on(resolver.resolve())?;
+        let proxy = event_loop.create_proxy();
         let handle = spawn(async move {
             while let Some(message) = mailbox.recv().await {
-                if let Err(error) = address.send(ApplicationMessage::Push(message)) {
+                if let Err(error) = proxy.send_event(ApplicationMessage::Push(message)) {
                     error!("{}", error);
                     break;
                 }
@@ -513,7 +511,9 @@ impl winit::Application for Application {
     }
 
     fn shutdown(&mut self, runtime: &Runtime) {
-        if let Err(error) = self.connection.asynchronous().send(Request::Shutdown) {
+        if let Err(error) =
+            Handle::current().block_on(self.connection.asynchronous().send(Request::Shutdown))
+        {
             error!("{}", error)
         }
         if let Err(error) = runtime.block_on(self.handle.take().unwrap()) {
@@ -521,9 +521,7 @@ impl winit::Application for Application {
         }
         if let Some(server) = self.server.as_mut() {
             server.close();
-            if let Err(error) = runtime.block_on(server.service().stop()) {
-                error!("{}", error)
-            }
+            runtime.block_on(server.service().stop())
         }
     }
 }
@@ -541,7 +539,7 @@ pub enum ApplicationMessage {
 }
 
 struct ApplicationLogger {
-    address: Address<ApplicationMessage>,
+    proxy: Mutex<EventLoopProxy<ApplicationMessage>>,
     secondary: env_logger::Logger,
 }
 
@@ -556,11 +554,15 @@ impl Log for ApplicationLogger {
         if INSIDE_LOG.with(|i| i.replace(true)) {
             return;
         }
-        let _ = self.address.send(ApplicationMessage::Log(
-            record.level(),
-            record.target().to_owned(),
-            format!("{}", record.args()),
-        ));
+        let _ = self
+            .proxy
+            .lock()
+            .unwrap()
+            .send_event(ApplicationMessage::Log(
+                record.level(),
+                record.target().to_owned(),
+                format!("{}", record.args()),
+            ));
         self.secondary.log(record);
         INSIDE_LOG.with(|i| i.replace(false));
     }
