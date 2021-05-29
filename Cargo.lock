@@ -4517,6 +4517,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "bytes",
+ "eyre",
  "futures",
  "libmdns",
  "log",
@@ -4524,6 +4525,7 @@ dependencies = [
  "quinn-proto",
  "rustls",
  "serde",
+ "thiserror",
  "tokio",
  "webpki",
  "wosim-util",

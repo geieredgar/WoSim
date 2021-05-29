@@ -11,7 +11,7 @@ use quinn::{
 };
 use tokio::{spawn, sync::mpsc};
 
-use crate::{session, AuthToken, Connection, RemoteConnection, Server, Service, Verification};
+use crate::{recv, send, AuthToken, Connection, Server, Service, Verification};
 
 const CHANNEL_BUFFER: usize = 16;
 
@@ -52,18 +52,18 @@ pub enum ResolveError<A> {
 
 impl<S: Service> Resolver<S> {
     pub async fn resolve(self) -> ResolveResult<S> {
+        let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
         match self {
             Resolver::Local {
                 service,
                 token,
                 port,
             } => {
-                let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
                 let tx = service
-                    .authenticate(Connection::Local(tx), AuthToken::Local(&token))
+                    .authenticate(Connection::local(tx), AuthToken::Local(&token))
                     .map_err(ResolveError::TokenAuthentication)?;
                 Ok((
-                    Connection::Local(tx),
+                    Connection::local(tx),
                     rx,
                     Some(Server::new(
                         service,
@@ -118,10 +118,9 @@ impl<S: Service> Resolver<S> {
                 send.finish()
                     .await
                     .map_err(ResolveError::FinishTokenStream)?;
-                let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
-                spawn(session(bi_streams, uni_streams, datagrams, tx));
+                spawn(recv::connection(bi_streams, uni_streams, datagrams, tx));
                 Ok((
-                    Connection::Remote(RemoteConnection::new(connection)),
+                    Connection::remote(send::Connection::new(connection)),
                     rx,
                     None,
                 ))

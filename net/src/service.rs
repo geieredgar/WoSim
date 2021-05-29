@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use crate::{AuthToken, Connection, Message};
 
 pub trait Service: Send + Sync + 'static {
-    type AuthError: Error + Send;
+    type AuthError: Error + Send + Sync + 'static;
     type Push: Message + Debug;
     type Request: Message + Debug;
 

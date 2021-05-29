@@ -369,10 +369,7 @@ impl Application {
     }
 
     async fn shutdown(&mut self) -> Result<(), Error> {
-        self.connection
-            .asynchronous()
-            .send(Request::Shutdown)
-            .await?;
+        self.connection.send(Request::Shutdown).await?;
         self.handle.take().unwrap().await?;
         if let Some(server) = self.server.as_mut() {
             server.close();
@@ -473,7 +470,6 @@ impl Application {
             self.last_server_update = now;
             let _ = self
                 .connection
-                .asynchronous()
                 .send(Request::UpdateSelf(SelfUpdate(
                     Position {
                         x: self.context.scene.camera.translation.vector[0],
