@@ -214,11 +214,7 @@ impl winit::Application for Application {
 
     type Args = Resolver;
 
-    fn new(
-        event_loop: &EventLoop<Self::Message>,
-        runtime: &Runtime,
-        resolver: Resolver,
-    ) -> Result<Self, Self::Error> {
+    fn new(event_loop: &EventLoop<Self::Message>, resolver: Resolver) -> Result<Self, Self::Error> {
         log::set_boxed_logger(Box::new(ApplicationLogger {
             proxy: Mutex::new(event_loop.create_proxy()),
             secondary: env_logger::builder().build(),
@@ -228,7 +224,8 @@ impl winit::Application for Application {
         let window = WindowBuilder::new()
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
-        let (connection, mut mailbox, mut server) = runtime.block_on(resolver.resolve())?;
+        let (connection, mut mailbox, mut server) =
+            Handle::current().block_on(resolver.resolve())?;
         let proxy = event_loop.create_proxy();
         let handle = spawn(async move {
             while let Some(message) = mailbox.recv().await {
@@ -291,7 +288,6 @@ impl winit::Application for Application {
     fn handle(
         &mut self,
         event: Event<Self::Message>,
-        _runtime: &Runtime,
     ) -> Result<::winit::event_loop::ControlFlow, Self::Error> {
         match event.map_nonuser_event() {
             Ok(event) => {
@@ -510,18 +506,18 @@ impl winit::Application for Application {
         Ok(ControlFlow::Poll)
     }
 
-    fn shutdown(&mut self, runtime: &Runtime) {
-        if let Err(error) =
-            Handle::current().block_on(self.connection.asynchronous().send(Request::Shutdown))
+    fn shutdown(&mut self) {
+        let handle = Handle::current();
+        if let Err(error) = handle.block_on(self.connection.asynchronous().send(Request::Shutdown))
         {
             error!("{}", error)
         }
-        if let Err(error) = runtime.block_on(self.handle.take().unwrap()) {
+        if let Err(error) = handle.block_on(self.handle.take().unwrap()) {
             error!("{}", error)
         }
         if let Some(server) = self.server.as_mut() {
             server.close();
-            runtime.block_on(server.service().stop())
+            handle.block_on(server.service().stop())
         }
     }
 }
