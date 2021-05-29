@@ -31,7 +31,7 @@ pub(super) enum MessageType {
     Bi(oneshot::Sender<Bytes>, usize),
 }
 
-pub trait Message: Send + Debug + Sized {
+pub trait Message: Send + Debug + Sized + 'static {
     fn into_outgoing(self) -> Result<OutgoingMessage, Box<dyn Error>>;
 
     fn from_incoming(message: IncomingMessage) -> Result<Self, Box<dyn Error>>;
