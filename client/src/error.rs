@@ -1,6 +1,8 @@
 use std::{fmt::Display, io};
 
 use semver::{ReqParseError, SemVerError};
+use server::Request;
+use tokio::{sync::mpsc::error::SendError, task::JoinError};
 use vulkan::ApiResult;
 use winit::error::{ExternalError, OsError};
 
@@ -20,6 +22,8 @@ pub enum Error {
     SemVer(SemVerError),
     ReqParse(ReqParseError),
     Resolve(ResolveError),
+    Join(JoinError),
+    SendRequest(SendError<Request>),
 }
 
 impl std::error::Error for Error {}
@@ -87,5 +91,17 @@ impl From<SemVerError> for Error {
 impl From<ResolveError> for Error {
     fn from(error: ResolveError) -> Self {
         Self::Resolve(error)
+    }
+}
+
+impl From<JoinError> for Error {
+    fn from(error: JoinError) -> Self {
+        Self::Join(error)
+    }
+}
+
+impl From<SendError<Request>> for Error {
+    fn from(error: SendError<Request>) -> Self {
+        Self::SendRequest(error)
     }
 }

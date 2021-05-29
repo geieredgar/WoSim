@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
-use crate::winit::run;
 use ::vulkan::{ApiResult, Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
 use ::winit::event::Event;
 use ::winit::event_loop::EventLoop;
@@ -35,7 +34,6 @@ use server::{
     Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
 };
 use structopt::StructOpt;
-use tokio::runtime::Handle;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
 use uuid::Uuid;
@@ -53,7 +51,6 @@ mod scene;
 mod shaders;
 mod view;
 mod vulkan;
-mod winit;
 
 struct Application {
     renderer: Renderer,
@@ -77,144 +74,10 @@ struct Application {
 }
 
 impl Application {
-    fn is_setup(&self) -> bool {
-        !self.uuid.is_nil()
-    }
-
-    fn render(&mut self) -> Result<(), Error> {
-        if self.is_setup() {
-            self.update();
-            self.context.debug.begin_frame();
-            let ctx = self.context.egui.begin();
-            self.context.debug.render(&ctx, &mut self.windows);
-            self.context
-                .egui
-                .end(if self.grab { None } else { Some(&self.window) })?;
-            let result = self.renderer.render(&self.device, &mut self.context);
-            let (resize, timestamps) = match result {
-                Ok(result) => (result.suboptimal, result.timestamps),
-                Err(err) => match err {
-                    Error::Vulkan(vulkan_err) => match vulkan_err {
-                        ::vulkan::Error::ApiResult(result) => {
-                            if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
-                                (true, None)
-                            } else {
-                                return Err(Error::Vulkan(vulkan_err));
-                            }
-                        }
-                        _ => return Err(Error::Vulkan(vulkan_err)),
-                    },
-                    _ => return Err(err),
-                },
-            };
-            self.context.debug.end_frame(timestamps, &self.connection);
-            if resize {
-                self.recreate_swapchain()?;
-            }
-        }
-        Ok(())
-    }
-
-    fn handle_early_mouse_grab(&mut self, event: &Event<()>) -> HandleFlow {
-        if self.grab {
-            if let Event::WindowEvent {
-                event: WindowEvent::CursorMoved { .. },
-                ..
-            } = event
-            {
-                return HandleFlow::Handled;
-            }
-        }
-        HandleFlow::Unhandled
-    }
-
-    fn recreate_swapchain(&mut self) -> Result<(), Error> {
-        self.device.wait_idle()?;
-        self.swapchain = Arc::new(create_swapchain(
-            &self.device,
-            &self.surface,
-            &self.window,
-            self.vsync,
-            Some(&self.swapchain),
-        )?);
-        self.renderer
-            .recreate_view(&self.device, &self.context, self.swapchain.clone())?;
-        Ok(())
-    }
-
-    fn update(&mut self) {
-        let now = Instant::now();
-        let duration = now.duration_since(self.last_update);
-        self.last_update = now;
-        let distance = duration.as_secs_f32() * 10.0;
-        self.time += duration.as_secs_f32();
-        let mut translation = Vector3::<f32>::zeros();
-        if self.control_state.forward {
-            translation.z -= distance;
-        }
-        if self.control_state.backward {
-            translation.z += distance;
-        }
-        if self.control_state.left {
-            translation.x -= distance;
-        }
-        if self.control_state.right {
-            translation.x += distance;
-        }
-        let translation: Translation3<_> =
-            (self.context.scene.camera.rotation() * translation).into();
-        self.context.scene.camera.translation *= translation;
-        let duration = now.duration_since(self.last_server_update);
-        if duration.as_millis() > 1000 / 30 && self.is_setup() {
-            self.last_server_update = now;
-            let _ = Handle::current().block_on(self.connection.asynchronous().send(
-                Request::UpdateSelf(SelfUpdate(
-                    Position {
-                        x: self.context.scene.camera.translation.vector[0],
-                        y: self.context.scene.camera.translation.vector[1],
-                        z: self.context.scene.camera.translation.vector[2],
-                    },
-                    Orientation {
-                        roll: self.context.scene.camera.roll,
-                        pitch: self.context.scene.camera.pitch,
-                        yaw: self.context.scene.camera.yaw,
-                    },
-                )),
-            ));
-        }
-    }
-
-    fn set_grab(&mut self, grab: bool) -> Result<(), Error> {
-        if self.grab == grab {
-            return Ok(());
-        }
-        self.grab = grab;
-        if grab {
-            self.window.set_cursor_visible(false);
-            self.window.set_cursor_grab(true)?;
-        } else {
-            let size = self.window.inner_size();
-            let position = PhysicalPosition {
-                x: size.width as i32 / 2,
-                y: size.height as i32 / 2,
-            };
-            self.window
-                .set_cursor_position(::winit::dpi::Position::Physical(position))?;
-            self.window.set_cursor_visible(true);
-            self.window.set_cursor_grab(false)?;
-        }
-        Ok(())
-    }
-}
-
-impl winit::Application for Application {
-    type Message = ApplicationMessage;
-
-    type Error = Error;
-
-    type Args = Resolver;
-
-    fn new(event_loop: &EventLoop<Self::Message>, resolver: Resolver) -> Result<Self, Self::Error> {
+    async fn new(
+        event_loop: &EventLoop<ApplicationMessage>,
+        resolver: Resolver,
+    ) -> Result<Self, Error> {
         log::set_boxed_logger(Box::new(ApplicationLogger {
             proxy: Mutex::new(event_loop.create_proxy()),
             secondary: env_logger::builder().build(),
@@ -224,8 +87,7 @@ impl winit::Application for Application {
         let window = WindowBuilder::new()
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;
-        let (connection, mut mailbox, mut server) =
-            Handle::current().block_on(resolver.resolve())?;
+        let (connection, mut mailbox, mut server) = resolver.resolve().await?;
         let proxy = event_loop.create_proxy();
         let handle = spawn(async move {
             while let Some(message) = mailbox.recv().await {
@@ -285,10 +147,10 @@ impl winit::Application for Application {
         })
     }
 
-    fn handle(
+    async fn handle(
         &mut self,
-        event: Event<Self::Message>,
-    ) -> Result<::winit::event_loop::ControlFlow, Self::Error> {
+        event: Event<'_, ApplicationMessage>,
+    ) -> Result<::winit::event_loop::ControlFlow, Error> {
         match event.map_nonuser_event() {
             Ok(event) => {
                 if self.handle_early_mouse_grab(&event).is_handled() {
@@ -391,7 +253,7 @@ impl winit::Application for Application {
                             }
                         }
                     }
-                    Event::MainEventsCleared => self.render()?,
+                    Event::MainEventsCleared => self.render().await?,
                     _ => {}
                 }
             }
@@ -506,19 +368,148 @@ impl winit::Application for Application {
         Ok(ControlFlow::Poll)
     }
 
-    fn shutdown(&mut self) {
-        let handle = Handle::current();
-        if let Err(error) = handle.block_on(self.connection.asynchronous().send(Request::Shutdown))
-        {
-            error!("{}", error)
-        }
-        if let Err(error) = handle.block_on(self.handle.take().unwrap()) {
-            error!("{}", error)
-        }
+    async fn shutdown(&mut self) -> Result<(), Error> {
+        self.connection
+            .asynchronous()
+            .send(Request::Shutdown)
+            .await?;
+        self.handle.take().unwrap().await?;
         if let Some(server) = self.server.as_mut() {
             server.close();
-            handle.block_on(server.service().stop())
+            server.service().stop().await;
         }
+        Ok(())
+    }
+
+    fn is_setup(&self) -> bool {
+        !self.uuid.is_nil()
+    }
+
+    async fn render(&mut self) -> Result<(), Error> {
+        if self.is_setup() {
+            self.update().await;
+            self.context.debug.begin_frame();
+            let ctx = self.context.egui.begin();
+            self.context.debug.render(&ctx, &mut self.windows);
+            self.context
+                .egui
+                .end(if self.grab { None } else { Some(&self.window) })?;
+            let result = self.renderer.render(&self.device, &mut self.context);
+            let (resize, timestamps) = match result {
+                Ok(result) => (result.suboptimal, result.timestamps),
+                Err(err) => match err {
+                    Error::Vulkan(vulkan_err) => match vulkan_err {
+                        ::vulkan::Error::ApiResult(result) => {
+                            if result == ApiResult::ERROR_OUT_OF_DATE_KHR {
+                                (true, None)
+                            } else {
+                                return Err(Error::Vulkan(vulkan_err));
+                            }
+                        }
+                        _ => return Err(Error::Vulkan(vulkan_err)),
+                    },
+                    _ => return Err(err),
+                },
+            };
+            self.context.debug.end_frame(timestamps, &self.connection);
+            if resize {
+                self.recreate_swapchain()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_early_mouse_grab(&mut self, event: &Event<()>) -> HandleFlow {
+        if self.grab {
+            if let Event::WindowEvent {
+                event: WindowEvent::CursorMoved { .. },
+                ..
+            } = event
+            {
+                return HandleFlow::Handled;
+            }
+        }
+        HandleFlow::Unhandled
+    }
+
+    fn recreate_swapchain(&mut self) -> Result<(), Error> {
+        self.device.wait_idle()?;
+        self.swapchain = Arc::new(create_swapchain(
+            &self.device,
+            &self.surface,
+            &self.window,
+            self.vsync,
+            Some(&self.swapchain),
+        )?);
+        self.renderer
+            .recreate_view(&self.device, &self.context, self.swapchain.clone())?;
+        Ok(())
+    }
+
+    async fn update(&mut self) {
+        let now = Instant::now();
+        let duration = now.duration_since(self.last_update);
+        self.last_update = now;
+        let distance = duration.as_secs_f32() * 10.0;
+        self.time += duration.as_secs_f32();
+        let mut translation = Vector3::<f32>::zeros();
+        if self.control_state.forward {
+            translation.z -= distance;
+        }
+        if self.control_state.backward {
+            translation.z += distance;
+        }
+        if self.control_state.left {
+            translation.x -= distance;
+        }
+        if self.control_state.right {
+            translation.x += distance;
+        }
+        let translation: Translation3<_> =
+            (self.context.scene.camera.rotation() * translation).into();
+        self.context.scene.camera.translation *= translation;
+        let duration = now.duration_since(self.last_server_update);
+        if duration.as_millis() > 1000 / 30 && self.is_setup() {
+            self.last_server_update = now;
+            let _ = self
+                .connection
+                .asynchronous()
+                .send(Request::UpdateSelf(SelfUpdate(
+                    Position {
+                        x: self.context.scene.camera.translation.vector[0],
+                        y: self.context.scene.camera.translation.vector[1],
+                        z: self.context.scene.camera.translation.vector[2],
+                    },
+                    Orientation {
+                        roll: self.context.scene.camera.roll,
+                        pitch: self.context.scene.camera.pitch,
+                        yaw: self.context.scene.camera.yaw,
+                    },
+                )))
+                .await;
+        }
+    }
+
+    fn set_grab(&mut self, grab: bool) -> Result<(), Error> {
+        if self.grab == grab {
+            return Ok(());
+        }
+        self.grab = grab;
+        if grab {
+            self.window.set_cursor_visible(false);
+            self.window.set_cursor_grab(true)?;
+        } else {
+            let size = self.window.inner_size();
+            let position = PhysicalPosition {
+                x: size.width as i32 / 2,
+                y: size.height as i32 / 2,
+            };
+            self.window
+                .set_cursor_position(::winit::dpi::Position::Physical(position))?;
+            self.window.set_cursor_visible(true);
+            self.window.set_cursor_grab(false)?;
+        }
+        Ok(())
     }
 }
 
@@ -643,21 +634,14 @@ impl Command {
                 port,
                 token,
                 skip_verification,
-            } => run::<Application>(
-                Runtime::new()?,
-                Resolver::Remote {
-                    hostname,
-                    port,
-                    token,
-                    skip_verification,
-                },
-            ),
-            Command::Create { token, port } => {
-                run::<Application>(Runtime::new()?, Resolver::Create { token, port })
-            }
-            Command::Play { token, port } => {
-                run::<Application>(Runtime::new()?, Resolver::Open { token, port })
-            }
+            } => Runner::run(Resolver::Remote {
+                hostname,
+                port,
+                token,
+                skip_verification,
+            }),
+            Command::Create { token, port } => Runner::run(Resolver::Create { token, port }),
+            Command::Play { token, port } => Runner::run(Resolver::Open { token, port }),
             Command::Info => Ok(to_writer(
                 stdout(),
                 &ApplicationInfo {
@@ -679,22 +663,17 @@ impl Command {
             Command::Debug(command) => {
                 let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
                 match command {
-                    DebugCommand::Play { port } => {
-                        run::<Application>(Runtime::new()?, Resolver::Open { token, port })
-                    }
+                    DebugCommand::Play { port } => Runner::run(Resolver::Open { token, port }),
                     DebugCommand::Create { port } => {
                         std::fs::remove_file("world.db")?;
-                        run::<Application>(Runtime::new()?, Resolver::Create { token, port })
+                        Runner::run(Resolver::Create { token, port })
                     }
-                    DebugCommand::Join { hostname, port } => run::<Application>(
-                        Runtime::new()?,
-                        Resolver::Remote {
-                            hostname,
-                            port,
-                            token,
-                            skip_verification: true,
-                        },
-                    ),
+                    DebugCommand::Join { hostname, port } => Runner::run(Resolver::Remote {
+                        hostname,
+                        port,
+                        token,
+                        skip_verification: true,
+                    }),
                 }
             }
         }
@@ -712,4 +691,50 @@ fn setup_env() {
 fn main() -> Result<(), Error> {
     setup_env();
     Command::from_args().run()
+}
+
+struct Runner {
+    application: Application,
+    runtime: Runtime,
+}
+
+impl Runner {
+    pub fn new(
+        event_loop: &EventLoop<ApplicationMessage>,
+        resolver: Resolver,
+    ) -> Result<Self, Error> {
+        let runtime = Runtime::new()?;
+        let _guard = runtime.enter();
+        let application = runtime.block_on(Application::new(event_loop, resolver))?;
+        Ok(Self {
+            application,
+            runtime,
+        })
+    }
+
+    pub fn handle(&mut self, event: Event<ApplicationMessage>) -> Result<ControlFlow, Error> {
+        let _guard = self.runtime.enter();
+        self.runtime.block_on(self.application.handle(event))
+    }
+
+    pub fn run(resolver: Resolver) -> Result<(), Error> {
+        let event_loop = EventLoop::with_user_event();
+        let mut runner = Runner::new(&event_loop, resolver)?;
+        event_loop.run(move |event, _, control_flow| match runner.handle(event) {
+            Ok(flow) => *control_flow = flow,
+            Err(error) => {
+                error!("{}", error);
+                *control_flow = ControlFlow::Exit;
+            }
+        });
+    }
+}
+
+impl Drop for Runner {
+    fn drop(&mut self) {
+        let _guard = self.runtime.enter();
+        if let Err(error) = self.runtime.block_on(self.application.shutdown()) {
+            error!("{}", error);
+        }
+    }
 }
