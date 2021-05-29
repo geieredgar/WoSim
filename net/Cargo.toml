@@ -8,7 +8,6 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-actor = { path = "../actor", package = "wosim-actor" }
 bincode = "1.3.3"
 bytes = "1.0.1"
 futures = "0.3.14"

@@ -8,7 +8,6 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-actor = { path = "../actor", package = "wosim-actor" }
 ash-window = "0.6"
 base64 = "0.13.0"
 copypasta = "0.7.1"

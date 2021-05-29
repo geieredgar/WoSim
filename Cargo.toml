@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "actor",
     "client",
     "build",
     "db",
