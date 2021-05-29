@@ -16,13 +16,13 @@ pub struct CompilerInitializationError;
 pub enum CompileError {
     #[error("invalid OUT_DIR environment variable")]
     OutDirVar(#[from] VarError),
-    #[error("reading source failed")]
+    #[error("could not read source file")]
     ReadSource(#[source] io::Error),
     #[error(transparent)]
     Compile(#[from] shaderc::Error),
-    #[error("creating output directory failed")]
+    #[error("could not create output directory")]
     CreateOutputDir(#[source] io::Error),
-    #[error("writing output file failed")]
+    #[error("could not write output file")]
     WriteOutput(#[source] io::Error),
 }
 
