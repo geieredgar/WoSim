@@ -9,21 +9,27 @@ use std::{
 };
 
 use crate::{handle, Push, Request, ServerMessage, State, User, PROTOCOL};
-use actor::{mailbox, Address, ControlFlow, SendError};
+use actor::{ControlFlow, SendError};
 use base64::DecodeError;
 use db::Database;
 use log::error;
 use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
-use tokio::{spawn, sync::oneshot, time::interval};
+use tokio::{
+    spawn,
+    sync::{mpsc, oneshot},
+    time::interval,
+};
 use uuid::Uuid;
+
+const CHANNEL_BOUND: usize = 16;
 
 pub struct Service {
     name: String,
     certificate_chain: CertificateChain,
     private_key: PrivateKey,
-    address: Address<ServerMessage>,
+    tx: mpsc::Sender<ServerMessage>,
 }
 
 #[derive(Debug)]
@@ -45,7 +51,7 @@ impl Service {
             .ok_or(CreateServiceError::CurrentDirIsRootDir)?
             .to_string_lossy()
             .to_string();
-        let (mut mailbox, address) = mailbox();
+        let (tx, mut rx) = mpsc::channel(CHANNEL_BOUND);
         let database = Database::open("world.db").map_err(CreateServiceError::OpenDatabase)?;
         spawn(async move {
             let mut state = State {
@@ -53,19 +59,19 @@ impl Service {
                 updates: Vec::new(),
                 observers: HashMap::new(),
             };
-            while let Some(message) = mailbox.recv().await {
+            while let Some(message) = rx.recv().await {
                 if let ControlFlow::Stop = handle(&mut state, message).await {
                     return;
                 }
             }
         });
         {
-            let address = address.clone();
+            let tx = tx.clone();
             spawn(async move {
                 let mut interval = interval(Duration::from_millis(1000 / 30));
                 loop {
                     interval.tick().await;
-                    if address.send(ServerMessage::PushUpdates).is_err() {
+                    if tx.send(ServerMessage::PushUpdates).await.is_err() {
                         break;
                     }
                 }
@@ -85,13 +91,13 @@ impl Service {
             name,
             certificate_chain,
             private_key,
-            address,
+            tx,
         })
     }
 
     pub async fn stop(&self) -> Result<(), SendError> {
         let (send, recv) = oneshot::channel();
-        self.address.send(ServerMessage::Stop(send))?;
+        self.tx.send(ServerMessage::Stop(send)).await?;
         recv.await.unwrap();
         Ok(())
     }
@@ -106,7 +112,7 @@ impl net::Service for Service {
         &self,
         connection: Connection<Self::Push>,
         token: AuthToken,
-    ) -> Result<Address<Self::Request>, Self::AuthError> {
+    ) -> Result<mpsc::Sender<Self::Request>, Self::AuthError> {
         let token = match token {
             AuthToken::Local(token) => token,
             AuthToken::Remote(token) => token,
@@ -130,30 +136,30 @@ impl net::Service for Service {
             name,
             connection,
         };
-        let (mut mailbox, address) = mailbox();
+        let (tx, mut rx) = mpsc::channel(CHANNEL_BOUND);
         {
-            let address = self.address.clone();
+            let tx = self.tx.clone();
             spawn(async move {
-                if let Err(error) = address.send(ServerMessage::Connected(user.clone())) {
+                if let Err(error) = tx.send(ServerMessage::Connected(user.clone())).await {
                     error!("{}", error);
                     return;
                 }
-                while let Some(request) = mailbox.recv().await {
+                while let Some(request) = rx.recv().await {
                     if let Request::Shutdown = request {
                         break;
                     }
-                    if let Err(error) = address.send(ServerMessage::Request(user.clone(), request))
+                    if let Err(error) = tx.send(ServerMessage::Request(user.clone(), request)).await
                     {
                         error!("{}", error);
                         return;
                     }
                 }
-                if let Err(error) = address.send(ServerMessage::Disconnected(user)) {
+                if let Err(error) = tx.send(ServerMessage::Disconnected(user)).await {
                     error!("{}", error)
                 }
             });
         }
-        Ok(address)
+        Ok(tx)
     }
 
     fn token_size_limit(&self) -> usize {

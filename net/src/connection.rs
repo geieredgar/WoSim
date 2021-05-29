@@ -9,7 +9,7 @@ use tokio::{
     io::AsyncWriteExt,
     spawn,
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver},
+        mpsc::{self, unbounded_channel, UnboundedReceiver},
         oneshot::Sender,
     },
 };
@@ -20,7 +20,7 @@ use crate::{Message, RecvError, RecvQueue, SendError};
 
 #[derive(Debug)]
 pub enum Connection<M: Message + 'static> {
-    Local(Address<M>),
+    Local(mpsc::Sender<M>),
     Remote(RemoteConnection),
 }
 
@@ -36,7 +36,18 @@ struct AutoCloser(quinn::Connection);
 impl<M: Message> Connection<M> {
     pub fn asynchronous(&self) -> Address<M> {
         match self {
-            Connection::Local(address) => address.clone(),
+            Connection::Local(tx) => {
+                let tx = tx.clone();
+                Address::new(move |message: M| {
+                    let tx = tx.clone();
+                    spawn(async move {
+                        if let Err(error) = tx.send(message).await {
+                            error!("{}", error);
+                        }
+                    });
+                    Ok(())
+                })
+            }
             Connection::Remote(connection) => {
                 let connection = connection.clone();
                 Address::new(move |message: M| {
@@ -54,7 +65,18 @@ impl<M: Message> Connection<M> {
 
     pub fn synchronous(&self) -> Address<M> {
         match self {
-            Connection::Local(address) => address.clone(),
+            Connection::Local(tx) => {
+                let tx = tx.clone();
+                Address::new(move |message: M| {
+                    let tx = tx.clone();
+                    spawn(async move {
+                        if let Err(error) = tx.send(message).await {
+                            error!("{}", error);
+                        }
+                    });
+                    Ok(())
+                })
+            }
             Connection::Remote(connection) => {
                 let (send, recv) = unbounded_channel();
                 let connection = connection.clone();

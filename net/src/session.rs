@@ -1,4 +1,3 @@
-use actor::Address;
 use bytes::{Buf, Bytes, BytesMut};
 use futures::{future::join_all, StreamExt};
 use log::error;
@@ -6,7 +5,7 @@ use quinn::{Datagrams, IncomingBiStreams, IncomingUniStreams, RecvStream, SendSt
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     spawn,
-    sync::mpsc::{unbounded_channel, UnboundedReceiver},
+    sync::mpsc::{self, unbounded_channel, UnboundedReceiver},
 };
 
 use crate::{IncomingMessage, Message, RecvError, SendError, Sender};
@@ -15,43 +14,43 @@ pub(super) async fn session<M: Message>(
     bi_streams: IncomingBiStreams,
     uni_streams: IncomingUniStreams,
     datagrams: Datagrams,
-    receiver: Address<M>,
+    tx: mpsc::Sender<M>,
 ) {
     join_all(vec![
-        spawn(self::bi_streams(bi_streams, receiver.clone())),
-        spawn(self::uni_streams(uni_streams, receiver.clone())),
-        spawn(self::datagrams(datagrams, receiver.clone())),
+        spawn(self::bi_streams(bi_streams, tx.clone())),
+        spawn(self::uni_streams(uni_streams, tx.clone())),
+        spawn(self::datagrams(datagrams, tx.clone())),
     ])
     .await;
 }
 
-async fn bi_streams<M: Message>(mut bi_streams: IncomingBiStreams, receiver: Address<M>) {
+async fn bi_streams<M: Message>(mut bi_streams: IncomingBiStreams, tx: mpsc::Sender<M>) {
     while let Some(Ok((send, recv))) = bi_streams.next().await {
-        let receiver = receiver.clone();
+        let tx = tx.clone();
         spawn(async move {
-            if let Err(error) = bi_stream(send, recv, receiver).await {
+            if let Err(error) = bi_stream(send, recv, tx).await {
                 error!("{}", error);
             }
         });
     }
 }
 
-async fn uni_streams<M: Message>(mut uni_streams: IncomingUniStreams, receiver: Address<M>) {
+async fn uni_streams<M: Message>(mut uni_streams: IncomingUniStreams, tx: mpsc::Sender<M>) {
     while let Some(Ok(recv)) = uni_streams.next().await {
-        let receiver = receiver.clone();
+        let tx = tx.clone();
         spawn(async move {
-            if let Err(error) = uni_stream(recv, receiver).await {
+            if let Err(error) = uni_stream(recv, tx).await {
                 error!("{}", error);
             }
         });
     }
 }
 
-async fn datagrams<M: Message>(mut datagrams: Datagrams, receiver: Address<M>) {
+async fn datagrams<M: Message>(mut datagrams: Datagrams, tx: mpsc::Sender<M>) {
     while let Some(Ok(datagram)) = datagrams.next().await {
-        let receiver = receiver.clone();
+        let tx = tx.clone();
         spawn(async move {
-            if let Err(error) = self::datagram(datagram, receiver).await {
+            if let Err(error) = self::datagram(datagram, tx).await {
                 error!("{}", error);
             }
         });
@@ -61,7 +60,7 @@ async fn datagrams<M: Message>(mut datagrams: Datagrams, receiver: Address<M>) {
 async fn bi_stream<M: Message>(
     send: SendStream,
     mut recv: RecvStream,
-    receiver: Address<M>,
+    tx: mpsc::Sender<M>,
 ) -> Result<(), RecvError> {
     let id = recv.read_u32().await.map_err(RecvError::ReadRequestId)?;
     if id == 0 {
@@ -79,7 +78,7 @@ async fn bi_stream<M: Message>(
             }
             recv_request(
                 &mut recv,
-                &receiver,
+                &tx,
                 id,
                 Sender::Shared(count, send_channel.clone()),
             )
@@ -87,17 +86,17 @@ async fn bi_stream<M: Message>(
             count += 1;
         }
     } else {
-        recv_request(&mut recv, &receiver, id, Sender::Unique(send)).await?;
+        recv_request(&mut recv, &tx, id, Sender::Unique(send)).await?;
     }
     Ok(())
 }
 
 async fn uni_stream<M: Message>(
     mut recv: RecvStream,
-    receiver: Address<M>,
+    tx: mpsc::Sender<M>,
 ) -> Result<(), RecvError> {
     let id = recv.read_u32().await.map_err(RecvError::ReadRequestId)?;
-    recv_request(&mut recv, &receiver, id, Sender::None).await
+    recv_request(&mut recv, &tx, id, Sender::None).await
 }
 
 async fn send_responses(
@@ -120,7 +119,7 @@ async fn send_responses(
 
 async fn recv_request<M: Message>(
     recv: &mut RecvStream,
-    receiver: &Address<M>,
+    tx: &mpsc::Sender<M>,
     id: u32,
     sender: Sender,
 ) -> Result<(), RecvError> {
@@ -136,14 +135,14 @@ async fn recv_request<M: Message>(
         .map_err(RecvError::ReadRequestData)?;
     let message = IncomingMessage::new(id, buf.freeze(), sender);
     let message = M::from_incoming(message).map_err(RecvError::FromIncoming)?;
-    let _ = receiver.send(message);
+    let _ = tx.send(message).await;
     Ok(())
 }
 
-async fn datagram<M: Message>(mut datagram: Bytes, receiver: Address<M>) -> Result<(), RecvError> {
+async fn datagram<M: Message>(mut datagram: Bytes, tx: mpsc::Sender<M>) -> Result<(), RecvError> {
     let id = datagram.get_u32();
     let message = IncomingMessage::new(id, datagram, Sender::None);
     let message = M::from_incoming(message).map_err(RecvError::FromIncoming)?;
-    let _ = receiver.send(message);
+    let _ = tx.send(message).await;
     Ok(())
 }

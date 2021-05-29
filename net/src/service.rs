@@ -1,8 +1,8 @@
 use std::error::Error;
 use std::fmt::Debug;
 
-use actor::Address;
 use quinn::{CertificateChain, PrivateKey, TransportConfig};
+use tokio::sync::mpsc;
 
 use crate::{AuthToken, Connection, Message};
 
@@ -15,7 +15,7 @@ pub trait Service: Send + Sync + 'static {
         &self,
         connection: Connection<Self::Push>,
         token: AuthToken,
-    ) -> Result<Address<Self::Request>, Self::AuthError>;
+    ) -> Result<mpsc::Sender<Self::Request>, Self::AuthError>;
 
     fn token_size_limit(&self) -> usize;
 

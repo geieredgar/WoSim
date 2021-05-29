@@ -5,14 +5,15 @@ use std::{
     sync::Arc,
 };
 
-use actor::{mailbox, Mailbox};
 use quinn::{
     ClientConfigBuilder, ConnectError, ConnectionError, Endpoint, EndpointError, NewConnection,
     WriteError,
 };
-use tokio::spawn;
+use tokio::{spawn, sync::mpsc};
 
 use crate::{session, AuthToken, Connection, RemoteConnection, Server, Service, Verification};
+
+const CHANNEL_BUFFER: usize = 16;
 
 pub enum Resolver<S: Service> {
     Local {
@@ -32,7 +33,7 @@ pub type ResolveResult<S> = Result<ResolveSuccess<S>, ResolveError<<S as Service
 
 pub type ResolveSuccess<S> = (
     Connection<<S as Service>::Request>,
-    Mailbox<<S as Service>::Push>,
+    mpsc::Receiver<<S as Service>::Push>,
     Option<Server<S>>,
 );
 #[derive(Debug)]
@@ -57,13 +58,13 @@ impl<S: Service> Resolver<S> {
                 token,
                 port,
             } => {
-                let (mailbox, address) = mailbox();
-                let address = service
-                    .authenticate(Connection::Local(address), AuthToken::Local(&token))
+                let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
+                let tx = service
+                    .authenticate(Connection::Local(tx), AuthToken::Local(&token))
                     .map_err(ResolveError::TokenAuthentication)?;
                 Ok((
-                    Connection::Local(address),
-                    mailbox,
+                    Connection::Local(tx),
+                    rx,
                     Some(Server::new(
                         service,
                         SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
@@ -117,11 +118,11 @@ impl<S: Service> Resolver<S> {
                 send.finish()
                     .await
                     .map_err(ResolveError::FinishTokenStream)?;
-                let (mailbox, client) = mailbox();
-                spawn(session(bi_streams, uni_streams, datagrams, client));
+                let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
+                spawn(session(bi_streams, uni_streams, datagrams, tx));
                 Ok((
                     Connection::Remote(RemoteConnection::new(connection)),
-                    mailbox,
+                    rx,
                     None,
                 ))
             }
