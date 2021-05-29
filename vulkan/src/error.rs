@@ -1,35 +1,16 @@
 use ash::{InstanceError, LoadingError};
+use thiserror::Error;
 
 use super::ApiResult;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
-    Loading(LoadingError),
-    Instance(InstanceError),
-    ApiResult(ApiResult),
-    Memory(vk_mem::Error),
-}
-
-impl From<LoadingError> for Error {
-    fn from(error: LoadingError) -> Self {
-        Self::Loading(error)
-    }
-}
-
-impl From<InstanceError> for Error {
-    fn from(error: InstanceError) -> Self {
-        Self::Instance(error)
-    }
-}
-
-impl From<ApiResult> for Error {
-    fn from(result: ApiResult) -> Self {
-        Self::ApiResult(result)
-    }
-}
-
-impl From<vk_mem::Error> for Error {
-    fn from(error: vk_mem::Error) -> Self {
-        Self::Memory(error)
-    }
+    #[error("could not load vulkan library")]
+    Loading(#[from] LoadingError),
+    #[error(transparent)]
+    Instance(#[from] InstanceError),
+    #[error("api call failed")]
+    ApiResult(#[from] ApiResult),
+    #[error(transparent)]
+    Memory(#[from] vk_mem::Error),
 }

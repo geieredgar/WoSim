@@ -1,40 +1,45 @@
 use std::{
-    collections::HashMap,
-    env::current_dir,
-    error::Error,
-    fmt::{Debug, Display},
-    io,
-    string::FromUtf8Error,
+    collections::HashMap, env::current_dir, fmt::Debug, io, string::FromUtf8Error, sync::Mutex,
     time::Duration,
 };
 
-use crate::{handle, Push, Request, ServerMessage, State, User, PROTOCOL};
-use actor::{mailbox, Address, ControlFlow, SendError};
+use crate::{handle, ControlFlow, Push, Request, ServerMessage, State, User, PROTOCOL};
 use base64::DecodeError;
 use db::Database;
 use log::error;
 use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
-use tokio::{spawn, sync::oneshot, time::interval};
+use thiserror::Error;
+use tokio::{spawn, sync::mpsc, task::JoinHandle, time::interval};
 use uuid::Uuid;
+
+const CHANNEL_BOUND: usize = 16;
 
 pub struct Service {
     name: String,
     certificate_chain: CertificateChain,
     private_key: PrivateKey,
-    address: Address<ServerMessage>,
+    tx: mpsc::Sender<ServerMessage>,
+    handle: Mutex<Option<JoinHandle<()>>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CreateServiceError {
-    NoCurrentDir(io::Error),
+    #[error("could not find current working directory")]
+    NoCurrentDir(#[source] io::Error),
+    #[error("cannot create service in root directory")]
     CurrentDirIsRootDir,
-    OpenDatabase(io::Error),
-    GenerateCertificates(RcgenError),
-    ParsePrivateKey(ParseError),
-    SerializeCertificate(RcgenError),
-    ParseCertificate(ParseError),
+    #[error("could not open database")]
+    OpenDatabase(#[source] io::Error),
+    #[error("could not generate self-signed certificates")]
+    GenerateCertificates(#[source] RcgenError),
+    #[error("could not parse private key")]
+    ParsePrivateKey(#[source] ParseError),
+    #[error("could not serialize certificate")]
+    SerializeCertificate(#[source] RcgenError),
+    #[error("could not parse certificate")]
+    ParseCertificate(#[source] ParseError),
 }
 
 impl Service {
@@ -45,27 +50,27 @@ impl Service {
             .ok_or(CreateServiceError::CurrentDirIsRootDir)?
             .to_string_lossy()
             .to_string();
-        let (mut mailbox, address) = mailbox();
+        let (tx, mut rx) = mpsc::channel(CHANNEL_BOUND);
         let database = Database::open("world.db").map_err(CreateServiceError::OpenDatabase)?;
-        spawn(async move {
+        let handle = Mutex::new(Some(spawn(async move {
             let mut state = State {
                 database,
                 updates: Vec::new(),
                 observers: HashMap::new(),
             };
-            while let Some(message) = mailbox.recv().await {
+            while let Some(message) = rx.recv().await {
                 if let ControlFlow::Stop = handle(&mut state, message).await {
                     return;
                 }
             }
-        });
+        })));
         {
-            let address = address.clone();
+            let tx = tx.clone();
             spawn(async move {
                 let mut interval = interval(Duration::from_millis(1000 / 30));
                 loop {
                     interval.tick().await;
-                    if address.send(ServerMessage::PushUpdates).is_err() {
+                    if tx.send(ServerMessage::PushUpdates).await.is_err() {
                         break;
                     }
                 }
@@ -85,15 +90,14 @@ impl Service {
             name,
             certificate_chain,
             private_key,
-            address,
+            tx,
+            handle,
         })
     }
 
-    pub async fn stop(&self) -> Result<(), SendError> {
-        let (send, recv) = oneshot::channel();
-        self.address.send(ServerMessage::Stop(send))?;
-        recv.await.unwrap();
-        Ok(())
+    pub async fn stop(&self) {
+        self.tx.send(ServerMessage::Stop).await.unwrap();
+        self.handle.lock().unwrap().take().unwrap().await.unwrap();
     }
 }
 
@@ -106,7 +110,7 @@ impl net::Service for Service {
         &self,
         connection: Connection<Self::Push>,
         token: AuthToken,
-    ) -> Result<Address<Self::Request>, Self::AuthError> {
+    ) -> Result<mpsc::Sender<Self::Request>, Self::AuthError> {
         let token = match token {
             AuthToken::Local(token) => token,
             AuthToken::Remote(token) => token,
@@ -130,30 +134,30 @@ impl net::Service for Service {
             name,
             connection,
         };
-        let (mut mailbox, address) = mailbox();
+        let (tx, mut rx) = mpsc::channel(CHANNEL_BOUND);
         {
-            let address = self.address.clone();
+            let tx = self.tx.clone();
             spawn(async move {
-                if let Err(error) = address.send(ServerMessage::Connected(user.clone())) {
+                if let Err(error) = tx.send(ServerMessage::Connected(user.clone())).await {
                     error!("{}", error);
                     return;
                 }
-                while let Some(request) = mailbox.recv().await {
+                while let Some(request) = rx.recv().await {
                     if let Request::Shutdown = request {
                         break;
                     }
-                    if let Err(error) = address.send(ServerMessage::Request(user.clone(), request))
+                    if let Err(error) = tx.send(ServerMessage::Request(user.clone(), request)).await
                     {
                         error!("{}", error);
                         return;
                     }
                 }
-                if let Err(error) = address.send(ServerMessage::Disconnected(user)) {
+                if let Err(error) = tx.send(ServerMessage::Disconnected(user)).await {
                     error!("{}", error)
                 }
             });
         }
-        Ok(address)
+        Ok(tx)
     }
 
     fn token_size_limit(&self) -> usize {
@@ -195,19 +199,16 @@ impl net::Service for Service {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AuthenticationError {
+    #[error("separator '#' is missing")]
     MissingTokenSeparator,
-    ParseUuid(uuid::Error),
-    DecodeUsername(DecodeError),
-    IllformedUsername(FromUtf8Error),
+    #[error("could not parse uuid")]
+    ParseUuid(#[source] uuid::Error),
+    #[error("could not decode username")]
+    DecodeUsername(#[source] DecodeError),
+    #[error("username is no valid UTF-8")]
+    IllformedUsername(#[source] FromUtf8Error),
+    #[error("token is empty")]
     EmptyToken,
 }
-
-impl Display for AuthenticationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Authentication failed")
-    }
-}
-
-impl Error for AuthenticationError {}

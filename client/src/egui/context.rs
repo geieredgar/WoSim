@@ -4,6 +4,7 @@ use egui::{ClippedMesh, CtxRef, Event, Key, Modifiers, PointerButton, Pos2, RawI
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 
+use eyre::eyre;
 use winit::{
     event::{
         ElementState, ModifiersState, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent,
@@ -19,10 +20,7 @@ use vulkan::{
     ShaderModuleCreateFlags, ShaderStageFlags, LOD_CLAMP_NONE,
 };
 
-use crate::{
-    error::Error,
-    shaders::{EGUI_FRAG, EGUI_VERT},
-};
+use crate::shaders::{EGUI_FRAG, EGUI_VERT};
 
 use super::Font;
 
@@ -42,7 +40,7 @@ pub struct EguiContext {
 }
 
 impl EguiContext {
-    pub fn new(device: &Arc<Device>, scale_factor: f32) -> Result<Self, Error> {
+    pub fn new(device: &Arc<Device>, scale_factor: f32) -> eyre::Result<Self> {
         let inner = CtxRef::default();
         let mut input = RawInput {
             pixels_per_point: Some(scale_factor),
@@ -107,9 +105,9 @@ impl EguiContext {
             font: None,
             cursor_pos: Pos2::default(),
             modifiers: Modifiers::default(),
-            clipboard: Arc::new(Mutex::new(
-                ClipboardContext::new().map_err(super::Error::NewClipboardFailed)?,
-            )),
+            clipboard: Arc::new(Mutex::new(ClipboardContext::new().map_err(|e| {
+                eyre!("could not create clipboard context. caused by {}", e)
+            })?)),
         })
     }
 
@@ -215,7 +213,7 @@ impl EguiContext {
         self.inner.clone()
     }
 
-    pub fn end(&mut self, window: Option<&Window>) -> Result<(), Error> {
+    pub fn end(&mut self, window: Option<&Window>) -> eyre::Result<()> {
         let (output, shapes) = self.inner.end_frame();
         let meshes = Arc::new(self.inner.tessellate(shapes));
         self.meshes = meshes;
@@ -232,7 +230,7 @@ impl EguiContext {
                 .lock()
                 .unwrap()
                 .set_contents(output.copied_text)
-                .map_err(super::Error::SetClipboardContents)?;
+                .map_err(|e| eyre!("could not set clipboard contents. caused by {}", e))?;
         }
         if let Some(open_url) = output.open_url {
             webbrowser::open(&open_url.url)?;

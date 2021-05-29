@@ -8,12 +8,13 @@ workspace = ".."
 edition = "2018"
 
 [dependencies]
-actor = { path = "../actor", package = "wosim-actor" }
 ash-window = "0.6"
 base64 = "0.13.0"
 copypasta = "0.7.1"
 egui = "0.12.0"
 env_logger = "0.8.3"
+eyre = "0.6.5"
+stable-eyre = "0.2.2"
 interop = { path = "../interop", package = "wosim-interop" }
 log = "0.4.14"
 nalgebra = "0.26.1"
@@ -23,6 +24,7 @@ semver = "0.11.0"
 serde_json = "1.0.59"
 server = { path = "../server", package = "wosim-server" }
 structopt = "0.3.21"
+thiserror = "1.0.25"
 util = { path = "../util", package = "wosim-util" }
 uuid = { version = "0.8.2", features = ["v4"] }
 vulkan = { path = "../vulkan", package = "wosim-vulkan" }
@@ -31,3 +33,5 @@ winit = "0.24"
 
 [build-dependencies]
 build = { path = "../build", package = "wosim-build" }
+eyre = "0.6.5"
+stable-eyre = "0.2.2"

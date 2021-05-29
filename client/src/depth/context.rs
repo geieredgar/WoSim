@@ -9,8 +9,8 @@ use vulkan::{
     PipelineShaderStageCreateInfo, ShaderModule, ShaderModuleCreateFlags, ShaderStageFlags,
 };
 
+use crate::shaders::DEPTH_PYRAMID_COMP;
 use crate::view::View;
-use crate::{error::Error, shaders::DEPTH_PYRAMID_COMP};
 
 pub struct DepthContext {
     pub pipeline: Pipeline,
@@ -25,7 +25,7 @@ impl DepthContext {
         device: &Arc<Device>,
         pipeline_cache: &PipelineCache,
         descriptor_pool: &DescriptorPool,
-    ) -> Result<Self, Error> {
+    ) -> eyre::Result<Self> {
         let shader_module = device.create_shader_module(
             ShaderModuleCreateFlags::empty(),
             &align_bytes(DEPTH_PYRAMID_COMP.load()?.bytes()),

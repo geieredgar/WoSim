@@ -1,18 +1,21 @@
 use std::{
+    error::Error,
     io,
     net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     str::FromStr,
     sync::Arc,
 };
 
-use actor::{mailbox, Mailbox};
 use quinn::{
     ClientConfigBuilder, ConnectError, ConnectionError, Endpoint, EndpointError, NewConnection,
     WriteError,
 };
-use tokio::spawn;
+use thiserror::Error;
+use tokio::{spawn, sync::mpsc};
 
-use crate::{session, AuthToken, Connection, RemoteConnection, Server, Service, Verification};
+use crate::{recv, send, AuthToken, Connection, Server, Service, Verification};
+
+const CHANNEL_BUFFER: usize = 16;
 
 pub enum Resolver<S: Service> {
     Local {
@@ -32,38 +35,48 @@ pub type ResolveResult<S> = Result<ResolveSuccess<S>, ResolveError<<S as Service
 
 pub type ResolveSuccess<S> = (
     Connection<<S as Service>::Request>,
-    Mailbox<<S as Service>::Push>,
+    mpsc::Receiver<<S as Service>::Push>,
     Option<Server<S>>,
 );
-#[derive(Debug)]
-pub enum ResolveError<A> {
-    TokenAuthentication(A),
-    InvalidCaCertificates(webpki::Error),
-    Bind(EndpointError),
-    IpResolution(io::Error),
+#[derive(Debug, Error)]
+pub enum ResolveError<A: Error + 'static> {
+    #[error("could not authenticate token")]
+    TokenAuthentication(#[source] A),
+    #[error("certificate authority has invalid certificate")]
+    InvalidCaCertificates(#[source] webpki::Error),
+    #[error("could not bind to endpoint")]
+    Bind(#[source] EndpointError),
+    #[error("could not resolve ip address")]
+    IpResolution(#[source] io::Error),
+    #[error("could not find a socket address")]
     NoSocketAddrFound,
-    Connect(ConnectError),
-    Connecting(ConnectionError),
-    OpenTokenStream(ConnectionError),
-    WriteTokenStream(WriteError),
-    FinishTokenStream(WriteError),
+    #[error("could not connect to server")]
+    Connect(#[source] ConnectError),
+    #[error("could not connect to server")]
+    Connecting(#[source] ConnectionError),
+    #[error("could not open stream for to send token")]
+    OpenTokenStream(#[source] ConnectionError),
+    #[error("could not write to token stream")]
+    WriteTokenStream(#[source] WriteError),
+    #[error("could not finish token stream")]
+    FinishTokenStream(#[source] WriteError),
 }
 
 impl<S: Service> Resolver<S> {
     pub async fn resolve(self) -> ResolveResult<S> {
+        let (tx, rx) = mpsc::channel(CHANNEL_BUFFER);
         match self {
             Resolver::Local {
                 service,
                 token,
                 port,
             } => {
-                let (mailbox, address) = mailbox();
-                let address = service
-                    .authenticate(Connection::Local(address), AuthToken::Local(&token))
+                let tx = service
+                    .authenticate(Connection::local(tx), AuthToken::Local(&token))
                     .map_err(ResolveError::TokenAuthentication)?;
                 Ok((
-                    Connection::Local(address),
-                    mailbox,
+                    Connection::local(tx),
+                    rx,
                     Some(Server::new(
                         service,
                         SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
@@ -117,11 +130,10 @@ impl<S: Service> Resolver<S> {
                 send.finish()
                     .await
                     .map_err(ResolveError::FinishTokenStream)?;
-                let (mailbox, client) = mailbox();
-                spawn(session(bi_streams, uni_streams, datagrams, client));
+                spawn(recv::connection(bi_streams, uni_streams, datagrams, tx));
                 Ok((
-                    Connection::Remote(RemoteConnection::new(connection)),
-                    mailbox,
+                    Connection::remote(send::Connection::new(connection)),
+                    rx,
                     None,
                 ))
             }

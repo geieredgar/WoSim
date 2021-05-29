@@ -12,12 +12,22 @@ use tokio::{
     sync::oneshot::{self},
 };
 
-use crate::{RemoteReturn, Return, Sender};
+use crate::{recv, Return};
+
+pub trait Message: Sync + Send + Debug + Sized + 'static {
+    fn into_outgoing(self) -> Result<OutgoingMessage, MessageError>;
+
+    fn from_incoming(message: IncomingMessage) -> Result<Self, MessageError>;
+
+    fn size_limit(message_id: u32) -> usize;
+}
+
+pub type MessageError = Box<dyn Error + Send + Sync + 'static>;
 
 pub struct IncomingMessage {
     id: u32,
     buf: Bytes,
-    sender: Sender,
+    r#return: recv::Return,
 }
 
 pub struct OutgoingMessage {
@@ -25,23 +35,21 @@ pub struct OutgoingMessage {
     pub(super) ty: MessageType,
 }
 
+#[derive(Debug)]
+pub struct FailedOutgoingMessage;
+
+#[derive(Debug)]
+pub struct InvalidIncomingId(u32);
+
 pub(super) enum MessageType {
     Datagram,
     Uni,
     Bi(oneshot::Sender<Bytes>, usize),
 }
 
-pub trait Message: Send + Debug + Sized {
-    fn into_outgoing(self) -> Result<OutgoingMessage, Box<dyn Error>>;
-
-    fn from_incoming(message: IncomingMessage) -> Result<Self, Box<dyn Error>>;
-
-    fn size_limit(message_id: u32) -> usize;
-}
-
 impl IncomingMessage {
-    pub(super) fn new(id: u32, buf: Bytes, sender: Sender) -> Self {
-        Self { id, buf, sender }
+    pub(super) fn new(id: u32, buf: Bytes, r#return: recv::Return) -> Self {
+        Self { id, buf, r#return }
     }
 
     pub fn id(&self) -> u32 {
@@ -53,11 +61,11 @@ impl IncomingMessage {
     }
 
     pub fn into_return<T>(self) -> Return<T> {
-        Return::Remote(RemoteReturn(self.sender))
+        Return::Remote(self.r#return)
     }
 
-    pub fn invalid_id<T>(&self) -> Result<T, Box<dyn Error>> {
-        Err(Box::new(InvalidIncomingId(self.id)))
+    pub fn invalid_id_error(&self) -> MessageError {
+        Box::new(InvalidIncomingId(self.id))
     }
 }
 
@@ -93,14 +101,14 @@ impl OutgoingMessage {
             let buf: Bytes = match recv.await {
                 Ok(buf) => buf,
                 Err(error) => {
-                    error!("{}", error);
+                    error!("{:?}", error);
                     return;
                 }
             };
             let value = match deserialize(&buf) {
                 Ok(value) => value,
                 Err(error) => {
-                    error!("{}", error);
+                    error!("{:?}", error);
                     return;
                 }
             };
@@ -114,9 +122,6 @@ impl OutgoingMessage {
     }
 }
 
-#[derive(Debug)]
-pub struct FailedOutgoingMessage;
-
 impl Display for FailedOutgoingMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "could not create outgoing message")
@@ -124,9 +129,6 @@ impl Display for FailedOutgoingMessage {
 }
 
 impl Error for FailedOutgoingMessage {}
-
-#[derive(Debug)]
-pub struct InvalidIncomingId(u32);
 
 impl Display for InvalidIncomingId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

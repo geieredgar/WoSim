@@ -2,7 +2,6 @@ use std::{collections::HashMap, sync::Arc};
 
 use net::{Message, OutgoingMessage};
 use serde::{Deserialize, Serialize};
-use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::{
@@ -24,23 +23,27 @@ pub(crate) enum ServerMessage {
     Connected(User),
     Disconnected(User),
     Request(User, Request),
-    Stop(oneshot::Sender<()>),
+    Stop,
     PushUpdates,
 }
 
 impl Message for Request {
-    fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
+    fn into_outgoing(
+        self,
+    ) -> Result<net::OutgoingMessage, Box<dyn std::error::Error + Send + Sync + 'static>> {
         match self {
             Request::UpdateSelf(value) => Ok(OutgoingMessage::datagram(1, value)?),
             Request::Shutdown => Ok(OutgoingMessage::uni(2, ())?),
         }
     }
 
-    fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
+    fn from_incoming(
+        message: net::IncomingMessage,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
         match message.id() {
             1 => Ok(Self::UpdateSelf(message.value()?)),
             2 => Ok(Self::Shutdown),
-            _ => message.invalid_id(),
+            _ => Err(message.invalid_id_error()),
         }
     }
 
@@ -62,18 +65,22 @@ pub struct Setup(pub Uuid, pub HashMap<Uuid, Player>, pub Vec<Position>);
 pub struct UpdateBatch(pub Arc<Vec<Update>>, pub usize);
 
 impl Message for Push {
-    fn into_outgoing(self) -> Result<net::OutgoingMessage, Box<dyn std::error::Error>> {
+    fn into_outgoing(
+        self,
+    ) -> Result<net::OutgoingMessage, Box<dyn std::error::Error + Send + Sync + 'static>> {
         match self {
             Push::Setup(setup) => Ok(OutgoingMessage::uni(1, setup)?),
             Push::Updates(updates) => Ok(OutgoingMessage::uni(2, updates)?),
         }
     }
 
-    fn from_incoming(message: net::IncomingMessage) -> Result<Self, Box<dyn std::error::Error>> {
+    fn from_incoming(
+        message: net::IncomingMessage,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync + 'static>> {
         match message.id() {
             1 => Ok(Self::Setup(message.value()?)),
             2 => Ok(Self::Updates(message.value()?)),
-            _ => message.invalid_id(),
+            _ => Err(message.invalid_id_error()),
         }
     }
 

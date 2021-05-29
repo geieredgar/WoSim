@@ -1,6 +1,9 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use crate::{Listener, OpenError, Service};
+use crate::{
+    recv::{Listener, OpenError},
+    Service,
+};
 
 pub struct Server<S: Service> {
     service: Arc<S>,

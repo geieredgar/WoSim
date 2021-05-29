@@ -1,4 +1,4 @@
-use net::OpenError;
+use net::recv::OpenError;
 use vulkan::ApiResult;
 
 use std::io;

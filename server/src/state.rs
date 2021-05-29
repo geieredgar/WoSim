@@ -3,12 +3,12 @@ use std::{
     io::{self, ErrorKind},
 };
 
-use actor::Address;
 use bincode::serialize_into;
 use bytemuck::{Pod, Zeroable};
 use db::{Database, Object};
 use noise::{NoiseFn, Perlin};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::Push;
@@ -20,7 +20,7 @@ pub(super) struct State {
 }
 
 pub struct Observer {
-    pub sync_push: Address<Push>,
+    pub sync_push: mpsc::Sender<Push>,
     pub after_update: usize,
 }
 
