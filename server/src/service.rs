@@ -1,11 +1,5 @@
 use std::{
-    collections::HashMap,
-    env::current_dir,
-    error::Error,
-    fmt::{Debug, Display},
-    io,
-    string::FromUtf8Error,
-    time::Duration,
+    collections::HashMap, env::current_dir, fmt::Debug, io, string::FromUtf8Error, time::Duration,
 };
 
 use crate::{handle, ControlFlow, Push, Request, ServerMessage, State, User, PROTOCOL};
@@ -15,6 +9,7 @@ use log::error;
 use net::{AuthToken, Connection};
 use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
 use rcgen::{generate_simple_self_signed, RcgenError};
+use thiserror::Error;
 use tokio::{
     spawn,
     sync::{mpsc, oneshot},
@@ -199,19 +194,16 @@ impl net::Service for Service {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AuthenticationError {
+    #[error("separator '#' is missing")]
     MissingTokenSeparator,
-    ParseUuid(uuid::Error),
-    DecodeUsername(DecodeError),
-    IllformedUsername(FromUtf8Error),
+    #[error("could not parse uuid")]
+    ParseUuid(#[source] uuid::Error),
+    #[error("could not decode username")]
+    DecodeUsername(#[source] DecodeError),
+    #[error("username is no valid UTF-8")]
+    IllformedUsername(#[source] FromUtf8Error),
+    #[error("token is empty")]
     EmptyToken,
 }
-
-impl Display for AuthenticationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Authentication failed")
-    }
-}
-
-impl Error for AuthenticationError {}

@@ -4546,6 +4546,7 @@ dependencies = [
  "rcgen",
  "semver 0.11.0",
  "serde",
+ "thiserror",
  "tokio",
  "uuid",
  "wosim-db",
