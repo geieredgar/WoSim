@@ -663,7 +663,7 @@ impl Command {
                 match command {
                     DebugCommand::Play { port } => Runner::run(Resolver::Open { token, port }),
                     DebugCommand::Create { port } => {
-                        std::fs::remove_file("world.db")?;
+                        let _ = std::fs::remove_file("world.db");
                         Runner::run(Resolver::Create { token, port })
                     }
                     DebugCommand::Join { hostname, port } => Runner::run(Resolver::Remote {
