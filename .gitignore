@@ -1,4 +1,2 @@
 target/
-ca/
-*.pem
 *.db

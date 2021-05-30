@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     io,
-    net::{IpAddr, Ipv6Addr, SocketAddr, ToSocketAddrs},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     str::FromStr,
     sync::Arc,
 };
@@ -97,14 +97,20 @@ impl<S: Service> Resolver<S> {
                 client_config.transport = Arc::new(S::client_transport_config());
                 let mut endpoint = Endpoint::builder();
                 endpoint.default_client_config(client_config);
-                let (endpoint, _) = endpoint
-                    .bind(&"[::]:0".parse().unwrap())
-                    .map_err(ResolveError::Bind)?;
-                let address = (hostname.as_str(), port)
+                let remote_address = (hostname.as_str(), port)
                     .to_socket_addrs()
                     .map_err(ResolveError::IpResolution)?
                     .next()
                     .ok_or(ResolveError::NoSocketAddrFound)?;
+                let local_address = match remote_address {
+                    SocketAddr::V4(_) => {
+                        SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
+                    }
+                    SocketAddr::V6(_) => {
+                        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0))
+                    }
+                };
+                let (endpoint, _) = endpoint.bind(&local_address).map_err(ResolveError::Bind)?;
                 let server_name = match IpAddr::from_str(&hostname) {
                     Ok(_) => "localhost",
                     Err(_) => &hostname,
@@ -116,7 +122,7 @@ impl<S: Service> Resolver<S> {
                     datagrams,
                     ..
                 } = endpoint
-                    .connect(&address, server_name)
+                    .connect(&remote_address, server_name)
                     .map_err(ResolveError::Connect)?
                     .await
                     .map_err(ResolveError::Connecting)?;
