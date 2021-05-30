@@ -19,7 +19,7 @@ use debug::DebugWindows;
 use eyre::{eyre, Context as EyreContext};
 use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::Level;
-use log::{error, LevelFilter, Log};
+use log::{error, Log};
 use nalgebra::Rotation3;
 use nalgebra::{RealField, Translation3, UnitQuaternion, Vector3};
 use net::Server;
@@ -78,12 +78,14 @@ impl Application {
         event_loop: &EventLoop<ApplicationMessage>,
         resolver: Resolver,
     ) -> eyre::Result<Self> {
+        let env_logger = env_logger::builder().build();
+        let filter = env_logger.filter();
         log::set_boxed_logger(Box::new(ApplicationLogger {
             proxy: Mutex::new(event_loop.create_proxy()),
-            secondary: env_logger::builder().build(),
+            secondary: env_logger,
         }))
         .wrap_err("could not set logger")?;
-        log::set_max_level(LevelFilter::Warn);
+        log::set_max_level(filter);
         let window = WindowBuilder::new()
             .with_title(format!("WoSim v{}", env!("CARGO_PKG_VERSION")))
             .build(event_loop)?;

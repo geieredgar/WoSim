@@ -77,10 +77,7 @@ impl<S: Service> Resolver<S> {
                 Ok((
                     Connection::local(tx),
                     rx,
-                    Some(Server::new(
-                        service,
-                        SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port),
-                    )),
+                    Some(Server::new(service, local_server_address(port))),
                 ))
             }
             Resolver::Remote {
@@ -145,4 +142,14 @@ impl<S: Service> Resolver<S> {
             }
         }
     }
+}
+
+#[cfg(windows)]
+fn local_server_address(port: u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)
+}
+
+#[cfg(not(windows))]
+fn local_server_address(port: u16) -> SocketAddr {
+    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port)
 }
