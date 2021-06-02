@@ -613,14 +613,15 @@ enum Command {
 #[derive(StructOpt)]
 enum DebugCommand {
     Play {
-        #[structopt(default_value)]
+        #[structopt(default_value = "1996")]
         port: u16,
     },
     Create {
-        #[structopt(default_value)]
+        #[structopt(default_value = "1996")]
         port: u16,
     },
     Join {
+        #[structopt(default_value = "1996")]
         port: u16,
         #[structopt(long, short, default_value, default_value = "localhost")]
         hostname: String,
