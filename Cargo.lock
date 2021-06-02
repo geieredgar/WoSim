@@ -4481,6 +4481,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "wosim-headless"
+version = "0.1.0"
+dependencies = [
+ "ctrlc",
+ "env_logger",
+ "semver 0.11.0",
+ "tokio",
+ "wosim-net",
+ "wosim-server",
+ "wosim-util",
+ "wosim-vulkan",
+]
+
+[[package]]
 name = "wosim-interop"
 version = "0.1.0"
 dependencies = [
@@ -4541,21 +4555,16 @@ dependencies = [
  "base64",
  "bincode",
  "bytemuck",
- "ctrlc",
- "env_logger",
  "log",
  "noise",
  "quinn",
  "rcgen",
- "semver 0.11.0",
  "serde",
  "thiserror",
  "tokio",
  "uuid",
  "wosim-db",
  "wosim-net",
- "wosim-util",
- "wosim-vulkan",
 ]
 
 [[package]]

@@ -1,16 +1,12 @@
-mod error;
 mod handle;
 mod message;
 mod service;
 mod state;
 mod user;
-mod vulkan;
 
 use std::io;
 
-pub use crate::vulkan::*;
 use db::Database;
-pub use error::*;
 pub(self) use handle::*;
 pub use message::*;
 pub use service::*;

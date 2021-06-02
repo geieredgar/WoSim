@@ -7,12 +7,17 @@ use std::{
     time::Duration,
 };
 
+use crate::vulkan::DeviceCandidate;
+use ::vulkan::Instance;
+use error::Error;
 use net::Server;
 use semver::Version;
+use server::Service;
 use tokio::{runtime::Runtime, time::sleep};
 use util::iterator::MaxOkFilterMap;
-use vulkan::Instance;
-use wosim_server::{DeviceCandidate, Error, Service};
+
+mod error;
+mod vulkan;
 
 fn main() -> Result<(), Error> {
     env_logger::init();

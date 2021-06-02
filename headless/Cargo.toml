@@ -1,0 +1,18 @@
+[package]
+name = "wosim-headless"
+version = "0.1.0"
+authors = ["Edgar Geier <egeier@rhrk.uni-kl.de>"]
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+workspace = ".."
+edition = "2018"
+
+[dependencies]
+ctrlc = "3.1.9"
+env_logger = "0.8.3"
+net = { path = "../net", package = "wosim-net" }
+semver = "0.11.0"
+server = { path = "../server", package = "wosim-server" }
+tokio = { version = "1.6.0", features = ["rt", "rt-multi-thread", "time"] }
+util = { path = "../util", package = "wosim-util" }
+vulkan = { path = "../vulkan", package = "wosim-vulkan" }

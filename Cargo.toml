@@ -3,6 +3,7 @@ members = [
     "client",
     "build",
     "db",
+    "headless",
     "interop",
     "launcher",
     "net",
