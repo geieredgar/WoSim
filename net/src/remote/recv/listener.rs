@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr, sync::Arc};
+use std::{io, sync::Arc};
 
 use libmdns::Responder;
 use quinn::{Endpoint, EndpointError, ServerConfig, ServerConfigBuilder, VarInt};
@@ -6,7 +6,7 @@ use rustls::TLSError;
 use thiserror::Error;
 use tokio::spawn;
 
-use crate::Service;
+use crate::{ServerConfiguration, Service};
 
 use super::listen;
 
@@ -28,8 +28,7 @@ pub enum OpenError {
 impl Listener {
     pub fn open<S: Service>(
         service: Arc<S>,
-        address: &SocketAddr,
-        use_mdns: bool,
+        configuration: &ServerConfiguration,
     ) -> Result<Self, OpenError> {
         let mut server_config = ServerConfig::default();
         server_config.transport = Arc::new(S::server_transport_config());
@@ -37,18 +36,23 @@ impl Listener {
         let protocol = S::protocol();
         server_config.protocols(&[protocol.as_bytes()]);
         server_config
-            .certificate(service.certificate_chain(), service.private_key())
+            .certificate(
+                configuration.certificate_chain.clone(),
+                configuration.private_key.clone(),
+            )
             .map_err(OpenError::InvalidCertificate)?;
         let server_config = server_config.build();
         let mut endpoint = Endpoint::builder();
         endpoint.listen(server_config);
-        let (endpoint, incoming) = endpoint.bind(address).map_err(OpenError::Bind)?;
+        let (endpoint, incoming) = endpoint
+            .bind(&configuration.address)
+            .map_err(OpenError::Bind)?;
         let port = endpoint
             .local_addr()
             .map_err(OpenError::LocalAddress)?
             .port();
         spawn(listen(incoming, service.clone()));
-        let _service = if use_mdns {
+        let _service = if configuration.use_mdns {
             let (responder, task) = Responder::with_default_handle().unwrap();
             spawn(task);
             let service_type = S::service_type();

@@ -106,7 +106,7 @@ impl Application {
             };
         });
         if let Some(server) = &mut server {
-            server.open(true).wrap_err("could not open server")?;
+            server.open().wrap_err("could not open server")?;
         }
         let version = Version::parse(env!("CARGO_PKG_VERSION"))?;
         let instance = Arc::new(

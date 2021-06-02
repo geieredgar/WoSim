@@ -1,6 +1,6 @@
 use std::{
     ffi::CString,
-    net::{Ipv6Addr, SocketAddr, SocketAddrV6},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -11,7 +11,7 @@ use std::{
 use crate::vulkan::DeviceCandidate;
 use ::vulkan::Instance;
 use error::Error;
-use net::Server;
+use net::{from_pem, local_server_address, self_signed, Server, ServerConfiguration};
 use semver::Version;
 use server::{create_world, Service};
 use structopt::StructOpt;
@@ -26,6 +26,12 @@ enum Command {
     Serve {
         #[structopt(long, short, default_value = "2021")]
         port: u16,
+        #[structopt(long, requires("private-key"))]
+        certificate_chain: Option<PathBuf>,
+        #[structopt(long)]
+        private_key: Option<PathBuf>,
+        #[structopt(long)]
+        use_mdns: bool,
     },
     Create,
 }
@@ -33,7 +39,12 @@ enum Command {
 impl Command {
     fn run(self) -> Result<(), Error> {
         match self {
-            Command::Serve { port } => {
+            Command::Serve {
+                port,
+                certificate_chain,
+                private_key,
+                use_mdns,
+            } => {
                 let running = Arc::new(AtomicBool::new(true));
                 let r = running.clone();
                 ctrlc::set_handler(move || {
@@ -55,11 +66,23 @@ impl Command {
                         .ok_or(Error::NoSuitableDeviceFound)?
                         .create()?;
                     let service = Arc::new(Service::new().map_err(Error::CreateService)?);
+                    let (certificate_chain, private_key) = if let Some(certificate_chain) =
+                        certificate_chain
+                    {
+                        from_pem(certificate_chain, private_key.unwrap()).map_err(Error::FromPem)?
+                    } else {
+                        self_signed().map_err(Error::SelfSign)?
+                    };
                     let mut server = Server::new(
                         service.clone(),
-                        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, port, 0, 0)),
+                        ServerConfiguration {
+                            address: local_server_address(port),
+                            certificate_chain,
+                            private_key,
+                            use_mdns,
+                        },
                     );
-                    server.open(false).map_err(Error::OpenServer)?;
+                    server.open().map_err(Error::OpenServer)?;
                     while running.load(Ordering::SeqCst) {
                         sleep(Duration::from_millis(10)).await;
                     }

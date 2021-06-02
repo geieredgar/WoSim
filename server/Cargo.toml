@@ -16,7 +16,6 @@ log = "0.4.14"
 net = { path = "../net", package = "wosim-net" }
 noise = "0.7.0"
 quinn = "0.7.2"
-rcgen = "0.8.11"
 serde = { version = "1.0.125", features = ["derive", "rc"] }
 thiserror = "1.0.25"
 tokio = { version = "1.6.0", features = ["rt", "rt-multi-thread", "time"] }

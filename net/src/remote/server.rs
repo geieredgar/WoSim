@@ -1,31 +1,36 @@
 use std::{net::SocketAddr, sync::Arc};
 
+use quinn::{CertificateChain, PrivateKey};
+
 use crate::{
     recv::{Listener, OpenError},
     Service,
 };
 
+pub struct ServerConfiguration {
+    pub address: SocketAddr,
+    pub certificate_chain: CertificateChain,
+    pub private_key: PrivateKey,
+    pub use_mdns: bool,
+}
+
 pub struct Server<S: Service> {
     service: Arc<S>,
-    address: SocketAddr,
+    configuration: ServerConfiguration,
     _listener: Option<Listener>,
 }
 
 impl<S: Service> Server<S> {
-    pub fn new(service: Arc<S>, address: SocketAddr) -> Self {
+    pub fn new(service: Arc<S>, configuration: ServerConfiguration) -> Self {
         Self {
             service,
-            address,
+            configuration,
             _listener: None,
         }
     }
 
-    pub fn open(&mut self, use_mdns: bool) -> Result<(), OpenError> {
-        self._listener = Some(Listener::open(
-            self.service.clone(),
-            &self.address,
-            use_mdns,
-        )?);
+    pub fn open(&mut self) -> Result<(), OpenError> {
+        self._listener = Some(Listener::open(self.service.clone(), &self.configuration)?);
         Ok(())
     }
 

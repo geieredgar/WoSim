@@ -1,4 +1,4 @@
-use net::recv::OpenError;
+use net::{recv::OpenError, FromPemError, SelfSignError};
 use vulkan::ApiResult;
 
 use std::io;
@@ -12,6 +12,8 @@ pub enum Error {
     OpenServer(OpenError),
     NoSuitableDeviceFound,
     CreateService(CreateServiceError),
+    SelfSign(SelfSignError),
+    FromPem(FromPemError),
 }
 
 impl From<vulkan::Error> for Error {

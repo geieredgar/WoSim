@@ -4486,6 +4486,7 @@ version = "0.1.0"
 dependencies = [
  "ctrlc",
  "env_logger",
+ "quinn",
  "semver 0.11.0",
  "structopt",
  "tokio",
@@ -4541,6 +4542,7 @@ dependencies = [
  "log",
  "quinn",
  "quinn-proto",
+ "rcgen",
  "rustls",
  "serde",
  "thiserror",
@@ -4559,7 +4561,6 @@ dependencies = [
  "log",
  "noise",
  "quinn",
- "rcgen",
  "serde",
  "thiserror",
  "tokio",
