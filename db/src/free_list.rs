@@ -101,14 +101,14 @@ impl FreeList {
     ) -> PageNr {
         let (page_nr, page) = if page_nr == NULL_PAGE_NR {
             let page_nr = allocator.allocate();
-            let page = pager.page_mut(page_nr).as_mut().unwrap();
+            let page = pager.page_mut(page_nr);
             *page = Page::zeroed();
             (page_nr, page)
         } else if pager.can_write(page_nr) {
-            (page_nr, pager.page_mut(page_nr).as_mut().unwrap())
+            (page_nr, pager.page_mut(page_nr))
         } else {
             let new_nr = allocator.reallocate(page_nr);
-            let page = pager.copy_page_mut(page_nr, new_nr).as_mut().unwrap();
+            let page = pager.copy_page_mut(page_nr, new_nr);
             (new_nr, page)
         };
         let child_index = index / ENTRIES_PER_DEPTH[depth];

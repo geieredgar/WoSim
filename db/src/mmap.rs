@@ -1,4 +1,5 @@
 use std::{
+    cell::UnsafeCell,
     fs::File,
     io,
     marker::PhantomData,
@@ -68,12 +69,8 @@ impl MappedBuffer {
         self.file.len()
     }
 
-    unsafe fn as_ptr(&self) -> *const u8 {
+    fn as_ptr(&self) -> *const u8 {
         self.raw.as_ptr()
-    }
-
-    unsafe fn as_mut_ptr(&self) -> *mut u8 {
-        self.raw.as_mut_ptr()
     }
 }
 
@@ -84,23 +81,16 @@ impl<T: Pod> MappedVec<T> {
         Ok(Self(MappedBuffer::new(file)?, PhantomData))
     }
 
-    pub unsafe fn get_mut(&mut self, index: usize) -> &mut T {
+    pub fn get(&self, index: usize) -> &UnsafeCell<T> {
         assert!(index < self.len());
-        self.0.as_mut_ptr().cast::<T>().add(index).as_mut().unwrap()
-    }
-
-    pub unsafe fn get(&self, index: usize) -> &T {
-        assert!(index < self.len());
-        self.0.as_ptr().cast::<T>().add(index).as_ref().unwrap()
-    }
-
-    pub unsafe fn copy_get_mut(&mut self, from: usize, to: usize) -> &mut T {
-        assert_ne!(from, to);
-        assert!(from < self.len());
-        assert!(to < self.len());
-        let dst = self.0.as_mut_ptr().cast::<T>().add(to);
-        dst.copy_from_nonoverlapping(self.0.as_ptr().cast::<T>().add(from), 1);
-        dst.as_mut().unwrap()
+        unsafe {
+            self.0
+                .as_ptr()
+                .cast::<UnsafeCell<T>>()
+                .add(index)
+                .as_ref()
+                .unwrap()
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -129,11 +119,11 @@ impl MappedBitset {
     }
 
     pub unsafe fn get(&mut self, index: usize) -> bool {
-        *self.0.get(index) != 0
+        *self.0.get(index).get() != 0
     }
 
     pub unsafe fn set(&mut self, index: usize) {
-        *self.0.get_mut(index) = 1;
+        *self.0.get(index).get() = 1;
     }
 
     pub fn len(&self) -> usize {

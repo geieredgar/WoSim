@@ -62,22 +62,26 @@ impl Pager {
         let inner = &mut *self.inner.get();
         let index = nr as usize;
         inner.grow(index + 1);
-        inner.pages.get(index)
+        &*inner.pages.get(index).get()
     }
 
-    pub unsafe fn page_mut(&self, nr: PageNr) -> *mut Page {
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn page_mut(&self, nr: PageNr) -> &mut Page {
         let inner = &mut *self.inner.get();
         let index = nr as usize;
         inner.grow(index + 1);
-        inner.pages.get_mut(index) as *mut Page
+        &mut *inner.pages.get(index).get()
     }
 
-    pub unsafe fn copy_page_mut(&self, from: PageNr, to: PageNr) -> *mut Page {
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn copy_page_mut(&self, from: PageNr, to: PageNr) -> &mut Page {
         let inner = &mut *self.inner.get();
         let from_index = from as usize;
         let to_index = to as usize;
         inner.grow(from_index.max(to_index) + 1);
-        inner.pages.copy_get_mut(from_index, to_index) as *mut Page
+        let to_ptr = inner.pages.get(to_index).get();
+        to_ptr.copy_from_nonoverlapping(inner.pages.get(from_index).get(), 1);
+        &mut *to_ptr
     }
 
     pub unsafe fn enable_write(&self, nr: PageNr) {
