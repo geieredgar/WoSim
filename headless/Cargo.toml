@@ -13,6 +13,7 @@ env_logger = "0.8.3"
 net = { path = "../net", package = "wosim-net" }
 semver = "0.11.0"
 server = { path = "../server", package = "wosim-server" }
+structopt = "0.3.21"
 tokio = { version = "1.6.0", features = ["rt", "rt-multi-thread", "time"] }
 util = { path = "../util", package = "wosim-util" }
 vulkan = { path = "../vulkan", package = "wosim-vulkan" }
