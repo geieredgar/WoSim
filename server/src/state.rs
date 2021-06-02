@@ -122,18 +122,18 @@ impl Object for World {
         [64; 256]
     }
 
-    fn serialize(&mut self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
-        self.positions.serialize(writer)?;
-        serialize_into(writer, &self.players)
+    fn serialize(&mut self, mut writer: impl std::io::Write) -> std::io::Result<()> {
+        self.positions.serialize(&mut writer)?;
+        serialize_into(&mut writer, &self.players)
             .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
         Ok(())
     }
 
     fn deserialize(
-        reader: &mut impl std::io::Read,
+        mut reader: impl std::io::Read,
         database: db::DatabaseRef,
     ) -> std::io::Result<Self> {
-        let positions = db::Vec::deserialize(reader, database)?;
+        let positions = db::Vec::deserialize(&mut reader, database)?;
         let players = bincode::deserialize_from(reader)
             .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
         Ok(Self { positions, players })
