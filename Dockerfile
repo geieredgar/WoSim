@@ -8,6 +8,9 @@ RUN pacman -Sy --noconfirm vulkan-icd-loader ${VULKAN_DRIVER}
 
 WORKDIR /world
 
+ENV CERT_CHAIN=/cert/fullchain.pem
+ENV PRIV_KEY=/cert/privkey.pem
+
 ENTRYPOINT ["wosim-headless"]
 
-CMD ["serve"]
+CMD ["serve", "--certificate-chain", "${CERT_CHAIN}", "--private-key", "${PRIV_KEY}"]
