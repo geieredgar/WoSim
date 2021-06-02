@@ -48,6 +48,7 @@ pub struct Player {
     pub uuid: u128,
     pub position: Position,
     pub orientation: Orientation,
+    pub _padding: [u8; 8],
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -100,6 +101,7 @@ impl World {
                     pitch: 0.0,
                     yaw: 0.0,
                 },
+                _padding: [0; 8],
             };
             let mut writer = self.players.write();
             let index = writer.len();
