@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use net::{Message, OutgoingMessage};
 use serde::{Deserialize, Serialize};
@@ -59,7 +59,7 @@ pub enum Push {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Setup(pub Uuid, pub HashMap<Uuid, Player>, pub Vec<Position>);
+pub struct Setup(pub Uuid, pub Vec<Player>, pub Vec<Position>);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateBatch(pub Arc<Vec<Update>>, pub usize);

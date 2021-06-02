@@ -285,10 +285,11 @@ impl Application {
                                     });
                                 }
                                 let mut player_group = Vec::new();
-                                for (uuid, player) in players {
+                                for player in players {
+                                    let uuid = Uuid::from_u128(player.uuid);
                                     if self.uuid != uuid {
                                         self.other_players
-                                            .insert(uuid, (player.clone(), player_group.len()));
+                                            .insert(uuid, (player, player_group.len()));
                                         player_group.push(Object {
                                             model: self.context.cube_model,
                                             transform: Transform {
@@ -316,11 +317,11 @@ impl Application {
                             Push::Updates(UpdateBatch(updates, after_index)) => {
                                 for update in &updates[after_index..] {
                                     match update {
-                                        Update::NewPlayer(uuid, player) => {
+                                        Update::NewPlayer(player) => {
                                             let player_group = &mut self.context.scene.groups[1];
                                             self.other_players.insert(
-                                                *uuid,
-                                                (player.clone(), player_group.len()),
+                                                Uuid::from_u128(player.uuid),
+                                                (*player, player_group.len()),
                                             );
                                             player_group.push(Object {
                                                 model: self.context.cube_model,

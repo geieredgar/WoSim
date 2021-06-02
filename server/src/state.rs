@@ -1,11 +1,7 @@
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    io::{self, ErrorKind},
-};
+use std::collections::HashMap;
 
-use bincode::serialize_into;
 use bytemuck::{Pod, Zeroable};
-use db::{Database, Object};
+use db::{Database, Entry, Len, Object, Tree};
 use noise::{NoiseFn, Perlin};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
@@ -42,25 +38,28 @@ pub struct Orientation {
 
 pub struct World {
     pub positions: db::Vec<Position>,
-    pub players: HashMap<Uuid, Player>,
+    pub players: db::Vec<Player>,
+    pub player_index: Tree<u128, usize>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Zeroable, Pod)]
+#[repr(C)]
 pub struct Player {
+    pub uuid: u128,
     pub position: Position,
     pub orientation: Orientation,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Update {
-    NewPlayer(Uuid, Player),
+    NewPlayer(Player),
     Player(Uuid, Position, Orientation),
 }
 
 impl World {
     pub fn new(database: db::DatabaseRef) -> Self {
         let perlin = Perlin::new();
-        let mut positions = db::Vec::new(database);
+        let mut positions = db::Vec::new(database.clone());
         {
             let mut positions = positions.write();
             for x in -20..21 {
@@ -78,15 +77,19 @@ impl World {
                 }
             }
         }
+        let players = db::Vec::new(database.clone());
+        let player_index = db::Tree::new(database);
         Self {
             positions,
-            players: HashMap::new(),
+            players,
+            player_index,
         }
     }
 
     pub fn register_player(&mut self, uuid: Uuid, updates: &mut Vec<Update>) {
-        if let Entry::Vacant(entry) = self.players.entry(uuid) {
+        if let Entry::Vacant(entry) = self.player_index.write().entry(&uuid.as_u128()) {
             let player = Player {
+                uuid: uuid.as_u128(),
                 position: Position {
                     x: 0.0,
                     y: 0.0,
@@ -98,8 +101,11 @@ impl World {
                     yaw: 0.0,
                 },
             };
-            entry.insert(player.clone());
-            updates.push(Update::NewPlayer(uuid, player));
+            let mut writer = self.players.write();
+            let index = writer.len();
+            writer.push(player);
+            entry.insert(index);
+            updates.push(Update::NewPlayer(player));
         }
     }
 
@@ -110,7 +116,8 @@ impl World {
         orientation: Orientation,
         updates: &mut Vec<Update>,
     ) {
-        let player = self.players.get_mut(&uuid).unwrap();
+        let player_index = *self.player_index.read().get(&uuid.as_u128()).unwrap();
+        let player = &mut self.players.write()[player_index];
         player.position = pos;
         player.orientation = orientation;
         updates.push(Update::Player(uuid, pos, orientation))
@@ -124,8 +131,8 @@ impl Object for World {
 
     fn serialize(&mut self, mut writer: impl std::io::Write) -> std::io::Result<()> {
         self.positions.serialize(&mut writer)?;
-        serialize_into(&mut writer, &self.players)
-            .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
+        self.players.serialize(&mut writer)?;
+        self.player_index.serialize(&mut writer)?;
         Ok(())
     }
 
@@ -133,9 +140,13 @@ impl Object for World {
         mut reader: impl std::io::Read,
         database: db::DatabaseRef,
     ) -> std::io::Result<Self> {
-        let positions = db::Vec::deserialize(&mut reader, database)?;
-        let players = bincode::deserialize_from(reader)
-            .map_err(|error| io::Error::new(ErrorKind::Other, error))?;
-        Ok(Self { positions, players })
+        let positions = db::Vec::deserialize(&mut reader, database.clone())?;
+        let players = db::Vec::deserialize(&mut reader, database.clone())?;
+        let player_index = db::Tree::deserialize(&mut reader, database)?;
+        Ok(Self {
+            positions,
+            players,
+            player_index,
+        })
     }
 }

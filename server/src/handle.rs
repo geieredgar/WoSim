@@ -19,6 +19,7 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             let world: &mut World = &mut state.database;
             world.register_player(user.uuid, &mut state.updates);
             let positions = world.positions.read().iter().cloned().collect();
+            let players = world.players.read().iter().cloned().collect();
             info!("User {} connected", user.name);
             let observer = Observer {
                 sync_push: user.connection.synchronous(),
@@ -26,11 +27,7 @@ pub(super) async fn handle(state: &mut State, message: ServerMessage) -> Control
             };
             let _ = observer
                 .sync_push
-                .send(Push::Setup(Setup(
-                    user.uuid,
-                    world.players.clone(),
-                    positions,
-                )))
+                .send(Push::Setup(Setup(user.uuid, players, positions)))
                 .await;
             state.observers.insert(user.uuid, observer);
         }
