@@ -11,6 +11,7 @@ mod page;
 mod raw;
 mod reference;
 mod sync;
+mod tree;
 mod vec;
 
 #[macro_use]
@@ -21,4 +22,5 @@ pub use file::File;
 pub use header::Format;
 pub use object::Object;
 pub use reference::DatabaseRef;
+pub use tree::{Entry, Tree};
 pub use vec::{Len, Vec};
