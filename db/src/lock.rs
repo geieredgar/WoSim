@@ -42,7 +42,7 @@ impl<'a> Lock<'a> {
         self.pager.page(nr)
     }
 
-    pub unsafe fn page_mut(&self, nr: &mut PageNr) -> *mut Page {
+    pub unsafe fn page_mut(&self, nr: &mut PageNr) -> &mut Page {
         if *nr == NULL_PAGE_NR {
             *nr = self.allocate_zeroed();
             self.pager.page_mut(*nr)
@@ -56,7 +56,7 @@ impl<'a> Lock<'a> {
         }
     }
 
-    pub unsafe fn try_page_mut(&self, nr: PageNr) -> Option<*mut Page> {
+    pub unsafe fn try_page_mut(&self, nr: PageNr) -> Option<&mut Page> {
         if self.pager.can_write(nr) {
             Some(self.pager.page_mut(nr))
         } else {
@@ -66,7 +66,7 @@ impl<'a> Lock<'a> {
 
     pub fn allocate_zeroed(&self) -> PageNr {
         let nr = self.allocate();
-        unsafe { self.pager.page_mut(nr).write(Page::zeroed()) };
+        unsafe { *self.pager.page_mut(nr) = Page::zeroed() };
         nr
     }
 

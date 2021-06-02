@@ -133,7 +133,7 @@ fn find_page(page_nr: PageNr, index: PageIndex, lock: &Lock) -> PageNr {
 }
 
 fn find_page_mut(page_nr: &mut PageNr, index: PageIndex, lock: &Lock) -> PageNr {
-    let page = unsafe { lock.page_mut(page_nr).as_mut().unwrap() };
+    let page = unsafe { lock.page_mut(page_nr) };
     if index.is_indirect() {
         find_page_mut(
             &mut cast_mut::<Page, IndirectPage>(page)[index.index()],
@@ -223,7 +223,7 @@ fn increment_levels(
     lock: &Lock,
 ) {
     let mut new_root_nr = 0;
-    let page = unsafe { lock.page_mut(&mut new_root_nr).as_mut().unwrap() };
+    let page = unsafe { lock.page_mut(&mut new_root_nr) };
     let next_root_level = PageLevel::parent(*current_root_level);
     if let Some(level) = *current_root_level {
         allocate(root_nr, *pages, next_root_level.child_pages(), level, lock);
@@ -254,7 +254,7 @@ fn decrement_levels(
 }
 
 fn allocate(page_nr: &mut PageNr, from: usize, to: usize, level: PageLevel, lock: &Lock) {
-    let page = unsafe { lock.page_mut(page_nr).as_mut().unwrap() };
+    let page = unsafe { lock.page_mut(page_nr) };
     if level.is_indirect() {
         let page = cast_mut::<Page, IndirectPage>(page);
         let from_index = from / level.child_pages();
@@ -291,7 +291,7 @@ fn allocate(page_nr: &mut PageNr, from: usize, to: usize, level: PageLevel, lock
 }
 
 fn allocate_full(page_nr: &mut PageNr, level: PageLevel, lock: &Lock) {
-    let page = unsafe { lock.page_mut(page_nr).as_mut().unwrap() };
+    let page = unsafe { lock.page_mut(page_nr) };
     if level.is_indirect() {
         let child_level = level.child().unwrap();
         for page_nr in cast_mut::<Page, IndirectPage>(page).iter_mut() {
@@ -310,8 +310,7 @@ fn deallocate_from(page_nr: &mut PageNr, from: usize, level: PageLevel, lock: &L
             return;
         }
         let child_level = level.child().unwrap();
-        let page =
-            cast_mut::<Page, IndirectPage>(unsafe { lock.page_mut(page_nr).as_mut().unwrap() });
+        let page = cast_mut::<Page, IndirectPage>(unsafe { lock.page_mut(page_nr) });
         deallocate_from(&mut page[index], child_from, child_level, lock);
         index += 1;
         while index < FAN_OUT && page[index] != NULL_PAGE_NR {

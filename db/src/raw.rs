@@ -36,7 +36,7 @@ impl RawDatabase {
         let data = MappedFile::new(file)?;
         let writable = MappedBitset::new(data.len() / PAGE_SIZE)?;
         let pager = Pager::new(data.clone(), writable.clone());
-        let page = unsafe { pager.page_mut(NULL_PAGE_NR).as_mut().unwrap() };
+        let page = unsafe { pager.page_mut(NULL_PAGE_NR) };
         let header_page = cast_mut::<Page, HeaderPage>(page);
         setup_header(&mut header_page.header);
         let state = header_page.header.validate(format)?;
@@ -77,7 +77,7 @@ impl RawDatabase {
         allocator_state.swap();
         self.version += 1;
         let pager = Pager::new(self.data.clone(), self.writable.clone());
-        let page = unsafe { pager.page_mut(NULL_PAGE_NR).as_mut().unwrap() };
+        let page = unsafe { pager.page_mut(NULL_PAGE_NR) };
         let header_page = cast_mut::<Page, HeaderPage>(page);
         header_page.header.snapshot(State::new(
             self.version,
