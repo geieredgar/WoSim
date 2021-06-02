@@ -13,7 +13,7 @@ use ::vulkan::Instance;
 use error::Error;
 use net::Server;
 use semver::Version;
-use server::Service;
+use server::{create_world, Service};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, time::sleep};
 use util::iterator::MaxOkFilterMap;
@@ -27,6 +27,7 @@ enum Command {
         #[structopt(long, short, default_value = "2021")]
         port: u16,
     },
+    Create,
 }
 
 impl Command {
@@ -67,6 +68,7 @@ impl Command {
                     Ok(())
                 })
             }
+            Command::Create => create_world().map_err(Error::Io),
         }
     }
 }
