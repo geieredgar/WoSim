@@ -59,7 +59,7 @@ impl Command {
                         service.clone(),
                         SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, port, 0, 0)),
                     );
-                    server.open().map_err(Error::OpenServer)?;
+                    server.open(false).map_err(Error::OpenServer)?;
                     while running.load(Ordering::SeqCst) {
                         sleep(Duration::from_millis(10)).await;
                     }

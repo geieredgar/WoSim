@@ -20,8 +20,12 @@ impl<S: Service> Server<S> {
         }
     }
 
-    pub fn open(&mut self) -> Result<(), OpenError> {
-        self._listener = Some(Listener::open(self.service.clone(), &self.address)?);
+    pub fn open(&mut self, use_mdns: bool) -> Result<(), OpenError> {
+        self._listener = Some(Listener::open(
+            self.service.clone(),
+            &self.address,
+            use_mdns,
+        )?);
         Ok(())
     }
 

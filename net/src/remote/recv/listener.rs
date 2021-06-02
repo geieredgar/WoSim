@@ -12,7 +12,7 @@ use super::listen;
 
 pub struct Listener {
     endpoint: Endpoint,
-    _service: libmdns::Service,
+    _service: Option<libmdns::Service>,
 }
 
 #[derive(Debug, Error)]
@@ -26,7 +26,11 @@ pub enum OpenError {
 }
 
 impl Listener {
-    pub fn open<S: Service>(service: Arc<S>, address: &SocketAddr) -> Result<Self, OpenError> {
+    pub fn open<S: Service>(
+        service: Arc<S>,
+        address: &SocketAddr,
+        use_mdns: bool,
+    ) -> Result<Self, OpenError> {
         let mut server_config = ServerConfig::default();
         server_config.transport = Arc::new(S::server_transport_config());
         let mut server_config = ServerConfigBuilder::new(server_config);
@@ -43,21 +47,25 @@ impl Listener {
             .local_addr()
             .map_err(OpenError::LocalAddress)?
             .port();
-        let (responder, task) = Responder::with_default_handle().unwrap();
         spawn(listen(incoming, service.clone()));
-        spawn(task);
-        let service_type = S::service_type();
-        let _service = responder.register(
-            format!("_{}._udp", service_type),
-            format!("{}-{}", service_type, port),
-            port,
-            &[
-                protocol,
-                service.authentication_type(),
-                service.name(),
-                service.description(),
-            ],
-        );
+        let _service = if use_mdns {
+            let (responder, task) = Responder::with_default_handle().unwrap();
+            spawn(task);
+            let service_type = S::service_type();
+            Some(responder.register(
+                format!("_{}._udp", service_type),
+                format!("{}-{}", service_type, port),
+                port,
+                &[
+                    protocol,
+                    service.authentication_type(),
+                    service.name(),
+                    service.description(),
+                ],
+            ))
+        } else {
+            None
+        };
         Ok(Self { endpoint, _service })
     }
 }
