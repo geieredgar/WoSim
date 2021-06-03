@@ -26,9 +26,9 @@ enum Command {
     Serve {
         #[structopt(long, short, default_value = "2021")]
         port: u16,
-        #[structopt(long, requires("private-key"))]
+        #[structopt(long, requires("private-key"), env("WOSIM_CERT_CHAIN"))]
         certificate_chain: Option<PathBuf>,
-        #[structopt(long)]
+        #[structopt(long, requires("certificate-chain"), env("WOSIM_PRIV_KEY"))]
         private_key: Option<PathBuf>,
         #[structopt(long)]
         use_mdns: bool,
