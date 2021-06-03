@@ -22,7 +22,6 @@
             "args": [
                 "debug",
                 "create",
-                "8787"
             ],
             "cwd": "${workspaceFolder}"
         },
@@ -44,7 +43,6 @@
             "args": [
                 "debug",
                 "create",
-                "8787"
             ],
             "cwd": "${workspaceFolder}"
         },
@@ -66,7 +64,6 @@
             "args": [
                 "debug",
                 "join",
-                "8787"
             ],
             "cwd": "${workspaceFolder}"
         },
