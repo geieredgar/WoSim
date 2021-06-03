@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::{cell::RefCell, ffi::CString, fmt::Debug, io::stdout, sync::Arc, time::Instant};
+use std::{cell::RefCell, ffi::CString, fmt::Debug, sync::Arc, time::Instant};
 
 use crate::vulkan::{choose_present_mode, choose_surface_format, DeviceCandidate};
 use ::vulkan::{Device, Extent2D, Instance, Surface, Swapchain, SwapchainConfiguration};
@@ -17,7 +17,6 @@ use ash_window::{create_surface, enumerate_required_extensions};
 use context::Context;
 use debug::DebugWindows;
 use eyre::{eyre, Context as EyreContext};
-use interop::{ApplicationInfo, WorldFormat, WorldFormatReq};
 use log::Level;
 use log::{error, Log};
 use nalgebra::Rotation3;
@@ -27,13 +26,10 @@ use renderer::RenderError;
 use renderer::Renderer;
 use resolver::Resolver;
 use scene::{ControlState, Object, Transform};
-use semver::{Compat, Version, VersionReq};
-use serde_json::to_writer;
+use semver::Version;
 use server::Orientation;
 use server::SelfUpdate;
-use server::{
-    Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch, PROTOCOL,
-};
+use server::{Connection, Player, Position, Push, Request, Service, Setup, Update, UpdateBatch};
 use structopt::StructOpt;
 use tokio::{runtime::Runtime, spawn, task::JoinHandle};
 use util::{handle::HandleFlow, iterator::MaxOkFilterMap};
@@ -600,7 +596,6 @@ enum Command {
         #[structopt(long, short, default_value)]
         port: u16,
     },
-    Info,
     Create {
         token: String,
         #[structopt(long, short, default_value)]
@@ -644,24 +639,6 @@ impl Command {
             }),
             Command::Create { token, port } => Runner::run(Resolver::Create { token, port }),
             Command::Play { token, port } => Runner::run(Resolver::Open { token, port }),
-            Command::Info => Ok(to_writer(
-                stdout(),
-                &ApplicationInfo {
-                    name: format!("WoSim v{}", env!("CARGO_PKG_VERSION"),),
-                    format: WorldFormat {
-                        base: "mainline".to_owned(),
-                        version: Version::new(0, 1, 0),
-                    },
-                    format_req: WorldFormatReq {
-                        base: "mainline".to_owned(),
-                        version: VersionReq::parse_compat(
-                            env!("CARGO_PKG_VERSION"),
-                            Compat::Cargo,
-                        )?,
-                    },
-                    protocol: PROTOCOL.to_owned(),
-                },
-            )?),
             Command::Debug(command) => {
                 let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
                 match command {
