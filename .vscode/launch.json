@@ -88,23 +88,5 @@
             "args": [],
             "cwd": "${workspaceFolder}"
         },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug launcher",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=wosim-launcher",
-                    "--package=wosim-launcher"
-                ],
-                "filter": {
-                    "name": "wosim-launcher",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
     ]
 }
