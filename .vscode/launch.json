@@ -73,19 +73,21 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug headless server",
+            "name": "Debug serving a world",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=wosim-server",
-                    "--package=wosim-server"
+                    "--bin=wosim-headless",
+                    "--package=wosim-headless"
                 ],
                 "filter": {
                     "name": "wosim-server",
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "serve"
+            ],
             "cwd": "${workspaceFolder}"
         },
     ]
