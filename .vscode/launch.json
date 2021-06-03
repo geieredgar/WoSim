@@ -42,7 +42,7 @@
             },
             "args": [
                 "debug",
-                "create",
+                "play",
             ],
             "cwd": "${workspaceFolder}"
         },
