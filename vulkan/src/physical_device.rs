@@ -87,15 +87,13 @@ impl PhysicalDevice {
 
     pub fn properties(&self) -> PhysicalDeviceProperties {
         let mut properties = PhysicalDeviceProperties::default();
-        if !self.instance.physical_device_properties_2_support {
-            properties.vulkan_10.properties = unsafe {
-                self.instance
-                    .inner
-                    .get_physical_device_properties(self.handle)
-            };
-            if properties.vulkan_10.properties.api_version < make_version(1, 2, 0) {
-                return properties;
-            }
+        properties.vulkan_10.properties = unsafe {
+            self.instance
+                .inner
+                .get_physical_device_properties(self.handle)
+        };
+        if properties.vulkan_10.properties.api_version < make_version(1, 1, 0) {
+            return properties;
         }
         unsafe {
             self.instance

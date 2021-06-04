@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::Debug;
 
-use quinn::{CertificateChain, PrivateKey, TransportConfig};
+use quinn::TransportConfig;
 use tokio::sync::mpsc;
 
 use crate::{AuthToken, Connection, Message};
@@ -36,8 +36,4 @@ pub trait Service: Send + Sync + 'static {
     fn name(&self) -> &str;
 
     fn description(&self) -> &str;
-
-    fn certificate_chain(&self) -> CertificateChain;
-
-    fn private_key(&self) -> PrivateKey;
 }

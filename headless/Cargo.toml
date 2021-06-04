@@ -1,5 +1,5 @@
 [package]
-name = "wosim-server"
+name = "wosim-headless"
 version = "0.1.0"
 authors = ["Edgar Geier <egeier@rhrk.uni-kl.de>"]
 license = "MIT OR Apache-2.0"
@@ -9,15 +9,13 @@ edition = "2018"
 publish = false
 
 [dependencies]
-base64 = "0.13.0"
-bincode = "1.3.3"
-bytemuck = { version = "1.5.1", features = ["derive"] }
-db = { path = "../db", package = "wosim-db" }
-log = "0.4.14"
+ctrlc = "3.1.9"
+env_logger = "0.8.3"
 net = { path = "../net", package = "wosim-net" }
-noise = "0.7.0"
 quinn = "0.7.2"
-serde = { version = "1.0.125", features = ["derive", "rc"] }
-thiserror = "1.0.25"
+semver = "0.11.0"
+server = { path = "../server", package = "wosim-server" }
+structopt = "0.3.21"
 tokio = { version = "1.6.0", features = ["rt", "rt-multi-thread", "time"] }
-uuid = { version = "0.8.2", features = ["serde"] }
+util = { path = "../util", package = "wosim-util" }
+vulkan = { path = "../vulkan", package = "wosim-vulkan" }

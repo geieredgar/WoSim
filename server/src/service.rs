@@ -8,8 +8,7 @@ use base64::DecodeError;
 use db::Database;
 use log::error;
 use net::{AuthToken, Connection};
-use quinn::{Certificate, CertificateChain, ParseError, PrivateKey, TransportConfig};
-use rcgen::{generate_simple_self_signed, RcgenError};
+use quinn::TransportConfig;
 use thiserror::Error;
 use tokio::{spawn, sync::mpsc, task::JoinHandle, time::interval};
 use uuid::Uuid;
@@ -18,8 +17,7 @@ const CHANNEL_BOUND: usize = 16;
 
 pub struct Service {
     name: String,
-    certificate_chain: CertificateChain,
-    private_key: PrivateKey,
+    description: String,
     tx: mpsc::Sender<ServerMessage>,
     handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -32,14 +30,6 @@ pub enum CreateServiceError {
     CurrentDirIsRootDir,
     #[error("could not open database")]
     OpenDatabase(#[source] io::Error),
-    #[error("could not generate self-signed certificates")]
-    GenerateCertificates(#[source] RcgenError),
-    #[error("could not parse private key")]
-    ParsePrivateKey(#[source] ParseError),
-    #[error("could not serialize certificate")]
-    SerializeCertificate(#[source] RcgenError),
-    #[error("could not parse certificate")]
-    ParseCertificate(#[source] ParseError),
 }
 
 impl Service {
@@ -76,20 +66,10 @@ impl Service {
                 }
             });
         }
-        let cert = generate_simple_self_signed(["localhost".to_owned()])
-            .map_err(CreateServiceError::GenerateCertificates)?;
-        let der = cert.serialize_private_key_der();
-        let private_key =
-            PrivateKey::from_der(&der).map_err(CreateServiceError::ParsePrivateKey)?;
-        let der = cert
-            .serialize_der()
-            .map_err(CreateServiceError::SerializeCertificate)?;
-        let cert = Certificate::from_der(&der).map_err(CreateServiceError::ParseCertificate)?;
-        let certificate_chain = CertificateChain::from_certs(vec![cert]);
+        let description = "".to_owned();
         Ok(Self {
             name,
-            certificate_chain,
-            private_key,
+            description,
             tx,
             handle,
         })
@@ -181,15 +161,7 @@ impl net::Service for Service {
     }
 
     fn description(&self) -> &str {
-        "A local world"
-    }
-
-    fn certificate_chain(&self) -> CertificateChain {
-        self.certificate_chain.clone()
-    }
-
-    fn private_key(&self) -> PrivateKey {
-        self.private_key.clone()
+        &self.description
     }
 
     fn client_transport_config() -> TransportConfig {

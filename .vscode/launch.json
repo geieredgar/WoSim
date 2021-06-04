@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -22,7 +19,6 @@
             "args": [
                 "debug",
                 "create",
-                "8787"
             ],
             "cwd": "${workspaceFolder}"
         },
@@ -43,8 +39,7 @@
             },
             "args": [
                 "debug",
-                "create",
-                "8787"
+                "play",
             ],
             "cwd": "${workspaceFolder}"
         },
@@ -66,44 +61,27 @@
             "args": [
                 "debug",
                 "join",
-                "8787"
             ],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug headless server",
+            "name": "Debug serving a world",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=wosim-server",
-                    "--package=wosim-server"
+                    "--bin=wosim-headless",
+                    "--package=wosim-headless"
                 ],
                 "filter": {
                     "name": "wosim-server",
                     "kind": "bin"
                 }
             },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug launcher",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=wosim-launcher",
-                    "--package=wosim-launcher"
-                ],
-                "filter": {
-                    "name": "wosim-launcher",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
+            "args": [
+                "serve"
+            ],
             "cwd": "${workspaceFolder}"
         },
     ]

@@ -13,7 +13,10 @@ use quinn::{
 use thiserror::Error;
 use tokio::{spawn, sync::mpsc};
 
-use crate::{recv, send, AuthToken, Connection, Server, Service, Verification};
+use crate::{
+    local_server_address, recv, self_signed, send, AuthToken, Connection, SelfSignError, Server,
+    ServerConfiguration, Service, Verification,
+};
 
 const CHANNEL_BUFFER: usize = 16;
 
@@ -60,6 +63,8 @@ pub enum ResolveError<A: Error + 'static> {
     WriteTokenStream(#[source] WriteError),
     #[error("could not finish token stream")]
     FinishTokenStream(#[source] WriteError),
+    #[error("could not generate self-signed certificate")]
+    SelfSign(#[from] SelfSignError),
 }
 
 impl<S: Service> Resolver<S> {
@@ -74,10 +79,19 @@ impl<S: Service> Resolver<S> {
                 let tx = service
                     .authenticate(Connection::local(tx), AuthToken::Local(&token))
                     .map_err(ResolveError::TokenAuthentication)?;
+                let (certificate_chain, private_key) = self_signed()?;
                 Ok((
                     Connection::local(tx),
                     rx,
-                    Some(Server::new(service, local_server_address(port))),
+                    Some(Server::new(
+                        service,
+                        ServerConfiguration {
+                            address: local_server_address(port),
+                            private_key,
+                            certificate_chain,
+                            use_mdns: true,
+                        },
+                    )),
                 ))
             }
             Resolver::Remote {
@@ -142,14 +156,4 @@ impl<S: Service> Resolver<S> {
             }
         }
     }
-}
-
-#[cfg(windows)]
-fn local_server_address(port: u16) -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)
-}
-
-#[cfg(not(windows))]
-fn local_server_address(port: u16) -> SocketAddr {
-    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port)
 }
