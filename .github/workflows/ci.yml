@@ -74,5 +74,5 @@ jobs:
         working-directory: src-tauri
 
       - name: Test rust code
-        run: cargo test
-        working-directory: --verbose
+        run: cargo test --verbose
+        working-directory: src-tauri
