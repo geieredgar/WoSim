@@ -30,8 +30,8 @@ jobs:
       - name: Install Vulkan SDK (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          choco install vulkan-sdk
-          echo "VULKAN_SDK=$VULKAN_SDK" >> $GITHUB_ENV
+          choco install vulkan-sdk --version=1.2.162.1
+          echo "VULKAN_SDK=C:\VulkanSDK\1.2.162.1" >> $GITHUB_ENV
         shell: bash
 
       - name: Install MoltenVK (macOS)
