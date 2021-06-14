@@ -1,7 +1,7 @@
 use std::{
     fs::read,
     io,
-    net::{IpAddr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
 };
 
@@ -63,10 +63,10 @@ pub fn from_pem(
 
 #[cfg(windows)]
 pub fn local_server_address(port: u16) -> SocketAddr {
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port)
+    SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), port)
 }
 
 #[cfg(not(windows))]
 pub fn local_server_address(port: u16) -> SocketAddr {
-    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), port)
+    SocketAddr::new(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), port)
 }
