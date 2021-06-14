@@ -27,7 +27,7 @@ const publishedAt = JSON.parse(
 ).publishedAt
 writeFileSync(
   `content/releases/${tag}.md`,
-  `---\ntitle: ${tag}\npublishedAt: ${publishedAt}\n---\n${notes}`
+  `---\ntitle: ${tag}\npublishedAt: ${publishedAt}\npreRelease: ${preRelease}\n---\n${notes}`
 )
 
 execSync('git config user.name github-actions')
