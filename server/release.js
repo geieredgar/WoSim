@@ -11,17 +11,17 @@ const lines = changelog.split('\n')
 const start =
   lines.findIndex((line) => line.startsWith('## ') && line.includes(version)) +
   1
-if (start == 0) {
+if (start === 0) {
   throw new Error('No changelog entry found')
 }
 const end = lines.slice(start).findIndex((line) => line.startsWith('## '))
-const range = end == -1 ? lines.slice(start) : lines.slice(start, end)
+const range = end === -1 ? lines.slice(start) : lines.slice(start, end)
 const notes = range.join('\n') + '\n'
+const preReleaseFlag = preRelease ? '-p' : ''
 writeFileSync('notes.md', notes)
 writeFileSync(`content/releases/${tag}.md`, `---\ntitle: ${tag}\n---\n${notes}`)
 execSync(
-  `gh release create ${tag} -t ${tag} -F notes.md ${preRelease ? '-p' : ''
-  } release/*`
+  `gh release create ${tag} -t ${tag} -F notes.md ${preReleaseFlag} release/*`
 )
 
 execSync('git config user.name github-actions')
