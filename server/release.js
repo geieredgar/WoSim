@@ -6,7 +6,7 @@ const tag = ref.split('/')[2]
 const version = tag?.startsWith('v') ? tag.substring(1) : tag
 const preRelease = version.includes('-')
 
-const changelog = execSync(`git show ${ref}:CHANGELOG.md`).toString();
+const changelog = readFileSync('../CHANGELOG.md').toString();
 const lines = changelog.split('\n');
 const start = lines.findIndex(line => line.startsWith('## ') && line.includes(version)) + 1
 if (start == 0) {
