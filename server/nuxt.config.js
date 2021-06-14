@@ -25,7 +25,7 @@ export default {
           )
           fs.appendFileSync(
             path.join(generator.distPath, 'content', entry.dir, 'index.txt'),
-            `${entry.path.substring(entry.dir.length)}.json\n`
+            `${entry.path.substring(entry.dir.length + 1)}.json\n`
           )
         })
       },
