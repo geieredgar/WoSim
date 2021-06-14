@@ -44,6 +44,11 @@ export default {
           title: 'Home',
           to: '/',
         },
+        {
+          icon: 'mdi-update',
+          title: 'Release notes',
+          to: '/releases',
+        },
       ],
     }
   },

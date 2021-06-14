@@ -3199,6 +3199,7 @@ dependencies = [
 name = "wosim-hub"
 version = "0.1.0-alpha.2"
 dependencies = [
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

@@ -2,4 +2,4 @@
 title: Welcome
 ---
 
-This version does not provide any content or functionality.
+You can see all released versions of the Hub [here](/releases).

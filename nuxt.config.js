@@ -20,7 +20,7 @@ export default {
 
   css: [],
 
-  plugins: ['~/plugins/http.ts'],
+  plugins: ['~/plugins/http.ts', '~/plugins/vue.ts'],
 
   components: true,
 
