@@ -19,6 +19,9 @@ writeFileSync('notes.md', notes)
 writeFileSync('content/releases/${tag}.md', `---\ntitle: ${tag}\n---\n${notes}`)
 execSync(`gh release create ${tag} -t ${tag} -F notes.md ${preRelease ? '-p' : ''} release/*`)
 
+execSync('git config user.name github-actions')
+execSync('git config user.email github-actions@github.com')
+
 if (!preRelease) {
     const latest = {
         version: process.env.INPUT_VERSION,
