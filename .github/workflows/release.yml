@@ -80,10 +80,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout website branch
         uses: actions/checkout@v2
         with:
           ref: website
+
+      - name: Checkout release tag
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.ref }}
+          path: main
 
       - name: Download release files
         uses: actions/download-artifact@v2
