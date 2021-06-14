@@ -79,6 +79,8 @@ if (pubkey !== undefined) {
     } else {
         copyFileSync(`src-tauri/target/release/bundle/dmg/WoSim Hub_${version}_x64.dmg`, 'release/wosim-hub-macos-x64.dmg')
     }
-    copyFileSync(`${src}.${archive}`, `${dst}.${archive}`)
-    copyFileSync(`${src}.${archive}.sig`, `${dst}.${archive}.sig`)
+    if (!preRelease) {
+        copyFileSync(`${src}.${archive}`, `${dst}.${archive}`)
+        copyFileSync(`${src}.${archive}.sig`, `${dst}.${archive}.sig`)
+    }
 }
