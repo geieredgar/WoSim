@@ -14,7 +14,7 @@ export default {
   hooks: {
     generate: {
       async distCopied(generator) {
-        const entries = await $content('/', { deep: true }).fetch()
+        const entries = await $content('/', { deep: true }).sortBy('date', 'desc').fetch()
         entries.forEach((entry) => {
           fs.mkdirSync(path.join(generator.distPath, 'content', entry.dir), {
             recursive: true,
