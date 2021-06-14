@@ -605,6 +605,7 @@ enum Command {
     Debug(DebugCommand),
 }
 
+#[cfg(debug_assertions)]
 #[derive(StructOpt)]
 enum DebugCommand {
     Play {
@@ -639,6 +640,7 @@ impl Command {
             }),
             Command::Create { token, port } => Runner::run(Resolver::Create { token, port }),
             Command::Play { token, port } => Runner::run(Resolver::Open { token, port }),
+            #[cfg(debug_assertions)]
             Command::Debug(command) => {
                 let token = format!("{}#{}", Uuid::new_v4(), base64::encode("Debugger"));
                 match command {

@@ -20,7 +20,7 @@ cfg_if::cfg_if! {
             }
 
             pub fn load(&self) -> Result<Asset, io::Error> {
-                Asset::new(self.bytes)
+                Ok(Asset::new(self.bytes))
             }
         }
 

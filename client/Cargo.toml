@@ -25,7 +25,7 @@ server = { path = "../server", package = "wosim-server" }
 structopt = "0.3.21"
 thiserror = "1.0.25"
 tracing = { version = "0.1.26", features = ["log-always"] }
-util = { path = "../util", package = "wosim-util" }
+util = { path = "../util", package = "wosim-util", features = ["embed-assets"] }
 uuid = { version = "0.8.2", features = ["v4"] }
 vulkan = { path = "../vulkan", package = "wosim-vulkan" }
 webbrowser = "0.5.5"
