@@ -1,12 +1,28 @@
 const { readFileSync, writeFileSync } = require('fs')
 const { execSync } = require('child_process')
 
-const release = JSON.parse(execSync(`gh release view v${process.env.INPUT_VERSION} --json body --json publishedAt`))
+const ref = process.env.GITHUB_REF
+const tag = ref.split('/')[2]
+const version = tag?.startsWith('v') ? tag.substring(1) : tag
+const preRelease = version.includes('-')
+
+const changelog = execSync(`git show ${ref}:CHANGELOG.md`).toString();
+const lines = changelog.split('\n');
+const start = lines.findIndex(line => line.startsWith('## ') && line.includes(version)) + 1
+if (start == 0) {
+    throw new Error('No changelog entry found')
+}
+const end = lines.slice(start).findIndex(line => line.startsWith('## '))
+const range = end == -1 ? lines.slice(start) : lines.slice(start, end)
+const notes = range.join('\n') + '\n'
+writeFileSync('notes.md', notes)
+writeFileSync('content/releases/${tag}.md', `---\ntitle: ${tag}\n---\n${notes}`)
+execSync(`gh release create ${tag} -t ${tag} -F notes.md ${preRelease ? '-p' : ''} release/*`)
 
 const latest = {
     version: process.env.INPUT_VERSION,
-    notes: release.body,
-    pub_date: new Date(release.publishedAt).toISOString(),
+    notes,
+    pub_date: new Date().toISOString(),
     platforms: {
         darwin: {
             signature:
@@ -28,5 +44,6 @@ const latest = {
 
 writeFileSync('static/latest.json', JSON.stringify(latest))
 execSync('git add static/latest.json')
-execSync('git commit -m "chore: update latest.json"')
+execSync('git add content')
+execSync(`git commit -m "chore: release ${tag}"`)
 execSync('git push')
