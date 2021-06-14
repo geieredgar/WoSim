@@ -1,36 +1,12 @@
 name: release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version number'
-        required: true
-      msi_version:
-        description: 'MSI version number'
-        required: true
-
-env:
-  INPUT_VERSION: ${{ github.event.inputs.version }}
-  INPUT_MSI_VERSION: ${{ github.event.inputs.msi_version }}
+  push:
+    tags:
+      - v*
 
 jobs:
-  create-release-draft:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@master
-
-      - name: Create release draft
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create v$INPUT_VERSION --title v$INPUT_VERSION --draft
-        shell: bash
-
   build:
-    needs: create-release-draft
-
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -44,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v2
 
       - name: Install webkit2gtk (ubuntu only)
         if: matrix.os == 'ubuntu-latest'
@@ -93,7 +69,29 @@ jobs:
         run: yarn build:release
 
       - name: Upload release files
+        uses: actions/upload-artifact@v2
+        with:
+          name: release-files
+          path: release
+
+  create-release:
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: website
+
+      - name: Download release files
+        uses: actions/download-artifact@v2
+        with:
+          name: release-files
+          path: release
+
+      - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload v$INPUT_VERSION release/*
-        shell: bash
+        run: yarn release

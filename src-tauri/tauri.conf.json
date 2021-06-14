@@ -46,10 +46,6 @@
         "timestampUrl": ""
       }
     },
-    "updater": {
-      "active": true,
-      "endpoints": ["https://wosim.net/hub/latest.json"]
-    },
     "allowlist": {
       "all": false
     },

@@ -1,5 +1,6 @@
-const defaultVersion = process.env.INPUT_VERSION
-const msiVersion = process.env.INPUT_MSI_VERSION
+const tag = process.env.GITHUB_REF?.split('/')[2];
+const fullVersion = tag?.startsWith('v') ? tag.substring(1) : tag
+const preRelease = fullVersion?.includes('-') || false
 
 enum Platform {
     Linux = 'linux',
@@ -18,20 +19,25 @@ const productName = (() => {
 
 const version = (() => {
     switch (platform) {
-        case Platform.Windows: return msiVersion
-        default: return defaultVersion
+        case Platform.Windows: return fullVersion?.split('-')[0]
+        default: return fullVersion
     }
 })();
 
 const pubkey = process.env.TAURI_PUBLIC_KEY
 
-const config = {
+const config: any = {
     package: {
         productName,
         version
     },
-    tauri: {
+}
+
+if (!preRelease) {
+    config.tauri = {
         updater: {
+            active: true,
+            endpoints: ['https://hub.wosim.net/latest.json'],
             pubkey
         }
     }
