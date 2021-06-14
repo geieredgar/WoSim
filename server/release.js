@@ -19,9 +19,15 @@ const range = end === -1 ? lines.slice(start) : lines.slice(start, end)
 const notes = range.join('\n') + '\n'
 const preReleaseFlag = preRelease ? '-p' : ''
 writeFileSync('notes.md', notes)
-writeFileSync(`content/releases/${tag}.md`, `---\ntitle: ${tag}\n---\n${notes}`)
 execSync(
   `gh release create ${tag} -t ${tag} -F notes.md ${preReleaseFlag} release/*`
+)
+const publishedAt = JSON.parse(
+  execSync(`gh release view ${tag} --json publishedAt`).toString()
+).publishedAt
+writeFileSync(
+  `content/releases/${tag}.md`,
+  `---\ntitle: ${tag}\npublishedAt: ${publishedAt}\n---\n${notes}`
 )
 
 execSync('git config user.name github-actions')
@@ -31,7 +37,7 @@ if (!preRelease) {
   const latest = {
     version: process.env.INPUT_VERSION,
     notes,
-    pub_date: new Date().toISOString(),
+    pub_date: publishedAt,
     platforms: {
       darwin: {
         signature: readFileSync(
