@@ -1,20 +1,18 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.4.0
     hooks:
-    -   id: check-added-large-files
-    -   id: check-case-conflict
-    -   id: check-merge-conflict
-    -   id: check-symlinks
-    -   id: check-toml
-    -   id: check-yaml
-    -   id: fix-byte-order-marker
-    -   id: no-commit-to-branch
-        args: [-b, main]
-    -   id: trailing-whitespace
--   repo: https://github.com/doublify/pre-commit-rust
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: fix-byte-order-marker
+      - id: trailing-whitespace
+  - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0
     hooks:
-    -   id: clippy
-        args: ['--workspace', '--', '-D', 'warnings']
-    -   id: fmt
+      - id: clippy
+        args: ["--workspace", "--", "-D", "warnings"]
+      - id: fmt
