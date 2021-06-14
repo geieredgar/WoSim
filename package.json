@@ -29,7 +29,7 @@
     "nuxt": "^2.15.3"
   },
   "resolutions": {
-    "@nuxtjs/vuetify/**/sass": "1.32.12"
+    "@nuxtjs/vuetify/**/sass": "~1.32.13"
   },
   "devDependencies": {
     "@babel/core": "^7.14.5",
