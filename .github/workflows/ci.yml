@@ -65,6 +65,12 @@ jobs:
       - name: Build bundles
         run: yarn tauri build
 
+      - name: Lint non-rust code
+        run: yarn lint
+
+      - name: Test non-rust code
+        run: yarn test
+
       - name: Format rust code
         run: cargo fmt --verbose
         working-directory: src-tauri
