@@ -16,7 +16,7 @@ const end = lines.slice(start).findIndex(line => line.startsWith('## '))
 const range = end == -1 ? lines.slice(start) : lines.slice(start, end)
 const notes = range.join('\n') + '\n'
 writeFileSync('notes.md', notes)
-writeFileSync('content/releases/${tag}.md', `---\ntitle: ${tag}\n---\n${notes}`)
+writeFileSync(`content/releases/${tag}.md`, `---\ntitle: ${tag}\n---\n${notes}`)
 execSync(`gh release create ${tag} -t ${tag} -F notes.md ${preRelease ? '-p' : ''} release/*`)
 
 execSync('git config user.name github-actions')
