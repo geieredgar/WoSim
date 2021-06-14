@@ -3,7 +3,7 @@ name: website
 on:
   push:
     branches:
-      - website
+      - main
 
 jobs:
   website:
@@ -16,7 +16,8 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@master
+        uses: actions/checkout@v2
+
 
       - name: Setup node env
         uses: actions/setup-node@v2.1.5
@@ -39,12 +40,14 @@ jobs:
 
       - name: Install dependencies
         run: yarn
+        working-directory: server
 
       - name: Build
         run: yarn generate
+        working-directory: server
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@4.1.4
         with:
           branch: gh-pages
-          folder: dist
+          folder: server/dist

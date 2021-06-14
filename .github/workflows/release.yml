@@ -74,36 +74,8 @@ jobs:
           name: release-files
           path: release
 
-  create-release:
+  deploy:
     needs: build
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout website branch
-        uses: actions/checkout@v2
-        with:
-          ref: website
-
-      - name: Checkout release tag
-        uses: actions/checkout@v2
-        with:
-          ref: ${{ github.ref }}
-          path: main
-
-      - name: Download release files
-        uses: actions/download-artifact@v2
-        with:
-          name: release-files
-          path: release
-
-      - name: Create release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: yarn release
-
-  deploy-website:
-    needs: create-release
 
     runs-on: ${{ matrix.os }}
 
@@ -115,8 +87,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
+      - name: Download release files
+        uses: actions/download-artifact@v2
         with:
-          ref: website
+          name: release-files
+          path: server/release
 
       - name: Setup node env
         uses: actions/setup-node@v2.1.5
@@ -139,12 +115,20 @@ jobs:
 
       - name: Install dependencies
         run: yarn
+        working-directory: server
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yarn release
+        working-directory: server
 
       - name: Build
         run: yarn generate
+        working-directory: server
 
-      - name: Deploy
+      - name: Deploy pages
         uses: JamesIves/github-pages-deploy-action@4.1.4
         with:
           branch: gh-pages
-          folder: dist
+          folder: server/dist
