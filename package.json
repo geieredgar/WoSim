@@ -32,7 +32,7 @@
     "vue-moment": "^4.1.0"
   },
   "resolutions": {
-    "@nuxtjs/vuetify/**/sass": "1.32.12"
+    "@nuxtjs/vuetify/**/sass": "1.32.13"
   },
   "devDependencies": {
     "@babel/core": "^7.14.6",
