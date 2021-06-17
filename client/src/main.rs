@@ -621,6 +621,8 @@ enum DebugCommand {
         port: u16,
         #[structopt(long, short, default_value, default_value = "localhost")]
         hostname: String,
+        #[structopt(long)]
+        verify: bool,
     },
 }
 
@@ -649,11 +651,15 @@ impl Command {
                         let _ = std::fs::remove_file("world.db");
                         Runner::run(Resolver::Create { token, port })
                     }
-                    DebugCommand::Join { hostname, port } => Runner::run(Resolver::Remote {
+                    DebugCommand::Join {
+                        hostname,
+                        port,
+                        verify,
+                    } => Runner::run(Resolver::Remote {
                         hostname,
                         port,
                         token,
-                        skip_verification: true,
+                        skip_verification: !verify,
                     }),
                 }
             }
