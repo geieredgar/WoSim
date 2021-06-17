@@ -1,0 +1,14 @@
+{
+  "version": "0.1.0",
+  "platforms": {
+    "darwin": {
+      "url": "https://github.com/wosim-net/hub/releases/download/v0.1-alpha/wosim-hub_0.1.0_x64.dmg"
+    },
+    "win64": {
+      "url": "https://github.com/wosim-net/hub/releases/download/v0.1-alpha/wosim-hub_0.1.0_x64.msi"
+    },
+    "linux": {
+      "url": "https://github.com/wosim-net/hub/releases/download/v0.1-alpha/wosim-hub_0.1.0_amd64.AppImage"
+    }
+  }
+}
