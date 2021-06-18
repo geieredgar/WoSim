@@ -8,5 +8,6 @@ members = [
     "util",
     "vulkan",
     "server",
+    "hub/src-tauri",
 ]
 default-members = ["client"]

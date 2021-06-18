@@ -1,0 +1,19 @@
+{
+    "version": "0.1.0-alpha.1",
+    "notes": "This version does not contain any content or functionality and is currently not marked as a pre-release to create valid download urls for the latest release.",
+    "pub_date": "2021-06-13T10:52:44.000Z",
+    "platforms": {
+        "darwin": {
+            "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUldScUV0RDJyZ1hNQjd3VHI2OHYvZExmM1hSUTZrZVJjRUxmR3VZREw3NFZoQklkUE9uZHJWSitOL1dkMFZoRDkzU3JzMy9yeWdOTFFQUi9Xai8xdXY4Vy9IcFhkMUJoV1FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNjIzNTgxMjIwCWZpbGU6L1VzZXJzL3J1bm5lci93b3JrL2h1Yi9odWIvc3JjLXRhdXJpL3RhcmdldC9yZWxlYXNlL2J1bmRsZS9tYWNvcy9Xb1NpbSBIdWIuYXBwLnRhci5negpmcFlmSkNjWUdQL0tqblQ4SDYzbmdTQWVBOVErdmc2NW9JaHFmaTBWWW90YXM5TVhsMFNSUHpXdTlkNzdPc0h6U0FTUEhMTStzRzlRWmtLZzAzQzlCdz09Cg==",
+            "url": "https://github.com/wosim-net/hub/releases/download/v0.1.0-alpha.1/wosim-hub-macos-x64.app.tar.gz"
+        },
+        "linux": {
+            "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUldScUV0RDJyZ1hNQjAzVFBEZWVWRWZ6Y2xxQmp3Qnlrc2hVRGc2c0FScVlPMEdvWEJadXRmUWJRVmQ5MkFFWFVQSDhUV2p1K3liTS8vcVJnT295QllYUnFiaHVaVWc4SVFZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNjIzNTgxMzEwCWZpbGU6L2hvbWUvcnVubmVyL3dvcmsvaHViL2h1Yi9zcmMtdGF1cmkvdGFyZ2V0L3JlbGVhc2UvYnVuZGxlL2FwcGltYWdlL3dvc2ltLWh1Yl8wLjEuMC1hbHBoYS4xX2FtZDY0LkFwcEltYWdlLnRhci5nego3WVN0b0w1RjB2N3I0U3c5cUZ6MkNSaVZnMVdNZk1GY3hxMkJoK2FBbVVJaGk0OEkrait4ekFXcTV6d01xN3ZCT2ZuM21pWklqZm9CdWJnajZWQmREdz09Cg==",
+            "url": "https://github.com/wosim-net/hub/releases/download/v0.1.0-alpha.1/wosim-hub-linux-amd64.AppImage.tar.gz"
+        },
+        "win64": {
+            "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUldScUV0RDJyZ1hNQjVQZHJsUEZnTHFxdE1CNk9obVlObHVOQ2kxS0FEOXFzMkR6V1Z6NWlrTTJRSWZmbGcxdjQzc2x0eldnbUk1eUlpRmZoMGNOMldVWUFIdWNxdWZVNmdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNjIzNTgxMzcxCWZpbGU6RDpcYVxodWJcaHViXHNyYy10YXVyaVx0YXJnZXRccmVsZWFzZVxidW5kbGUvbXNpL1dvU2ltIEh1Yl8wLjEuMF94NjQubXNpLnppcAowYy9VTUtGUlZzaXd6aFZGR1ZBb0ZiRGtZdEtLVzVMVE1qbUkybWloYXd1YzV6SXBKQS93c3FobHJFOHpUWlJBdnQyL25ZRnBmNjM1MlNhUEIvTjBDdz09Cg==",
+            "url": "https://github.com/wosim-net/hub/releases/download/v0.1.0-alpha.1/wosim-hub-windows-x64.msi.zip"
+        }
+    }
+}

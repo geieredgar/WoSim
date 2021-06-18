@@ -58,4 +58,27 @@ export default {
   },
 
   build: {},
+
+  hooks: {
+    generate: {
+      async distCopied(generator) {
+        const entries = await $content('/hub', { deep: true })
+          .sortBy('date', 'desc')
+          .fetch()
+        entries.forEach((entry) => {
+          fs.mkdirSync(path.join(generator.distPath, 'hub', entry.dir), {
+            recursive: true,
+          })
+          fs.writeFileSync(
+            path.join(generator.distPath, 'hub', `${entry.path}.json`),
+            JSON.stringify(entry)
+          )
+          fs.appendFileSync(
+            path.join(generator.distPath, 'hub', entry.dir, 'index.txt'),
+            `${entry.path.substring(entry.dir.length + 1)}.json\n`
+          )
+        })
+      },
+    },
+  },
 }

@@ -7,29 +7,13 @@
     "build": "nuxt build",
     "start": "nuxt start",
     "generate": "nuxt generate",
-    "lint:js": "eslint --ext \".js,.vue,.ts\" --ignore-path .gitignore .",
-    "lint:style": "stylelint \"**/*.{vue,css}\" --ignore-path .gitignore",
-    "lint": "yarn lint:js && yarn lint:style",
     "test": "jest"
-  },
-  "lint-staged": {
-    "*.{js,ts,vue}": "eslint",
-    "*.{css,vue}": "stylelint"
-  },
-  "husky": {
-    "hooks": {
-      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS",
-      "pre-commit": "lint-staged"
-    }
   },
   "dependencies": {
     "@nuxt/content": "^1.14.0",
     "consola": "^2.15.3",
     "core-js": "^3.9.1",
     "nuxt": "^2.15.7"
-  },
-  "resolutions": {
-    "@nuxtjs/vuetify/**/sass": "~1.32.13"
   },
   "devDependencies": {
     "@babel/core": "^7.14.6",

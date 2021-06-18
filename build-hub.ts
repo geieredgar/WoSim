@@ -41,7 +41,7 @@ if (!preRelease) {
   config.tauri = {
     updater: {
       active: true,
-      endpoints: ['https://hub.wosim.net/latest.json'],
+      endpoints: ['https://wosim.net/hub/latest.json'],
       pubkey,
     },
   }
