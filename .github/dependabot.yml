@@ -30,3 +30,18 @@ updates:
     prefix: fix
     prefix-development: chore
     include: scope
+# Fetch and update latest `cargo` pkgs
+- package-ecosystem: cargo
+  directory: '/'
+  schedule:
+    interval: daily
+    time: '00:00'
+  open-pull-requests-limit: 10
+  reviewers:
+    - geieredgar
+  assignees:
+    - geieredgar
+  commit-message:
+    prefix: fix
+    prefix-development: chore
+    include: scope

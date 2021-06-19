@@ -1,3 +1,5 @@
 node_modules/
 target/
 *.db
+.yarn/
+.pnp.js

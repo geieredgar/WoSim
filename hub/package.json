@@ -31,9 +31,6 @@
     "nuxt": "^2.15.7",
     "vue-moment": "^4.1.0"
   },
-  "resolutions": {
-    "@nuxtjs/vuetify/**/sass": "1.32.13"
-  },
   "devDependencies": {
     "@babel/core": "^7.14.6",
     "@commitlint/cli": "^12.0.1",
@@ -65,11 +62,9 @@
     "stylelint-config-prettier": "^8.0.2",
     "stylelint-config-standard": "^22.0.0",
     "ts-jest": "^26.5.4",
-    "ts-node": "^10.0.0",
     "typescript": "~4.2",
     "vue": "^2.6.14",
     "vue-jest": "^3.0.4",
-    "vue-template-compiler": "^2.6.14",
-    "webpack": "5"
+    "vue-template-compiler": "^2.6.14"
   }
 }

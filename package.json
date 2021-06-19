@@ -1,7 +1,11 @@
 {
-    "private": true,
-    "workspaces": [
-        "hub",
-        "website"
-    ]
+  "private": true,
+  "workspaces": [
+    "hub",
+    "website"
+  ],
+  "engines": {
+    "pm": "yarn@2.4.2"
+  },
+  "packageManager": "yarn@2.4.2"
 }
